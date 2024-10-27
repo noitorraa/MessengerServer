@@ -3,23 +3,22 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System;
 
-List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
-
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))); // это настройка соединения с бд
+
+List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.Urls.Add("https://192.168.0.11:7243/"); // дабавил url своего сервера
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

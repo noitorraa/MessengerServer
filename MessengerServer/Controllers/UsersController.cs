@@ -18,7 +18,7 @@ namespace MessengerServer.Controllers
             _context = context;
         }
 
-        [HttpGet("authorization")]
+        [HttpGet("authorization")] // тут получения пользователя для авторизации
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login && u.PasswordHash == password);
@@ -28,7 +28,16 @@ namespace MessengerServer.Controllers
             }
             return Ok(user);
         }
-
-        // Другие методы для работы с пользователями
+        
+        [HttpGet("chats/{userId}")] // тут получение списка чатов пользователя для отображения их в клиентской части
+        public async Task<ActionResult<List<Chat>>> GetUserChats(int userId)
+        {
+            var chats = await _context.Chats.Where(c => c.ChatMembers.First().UserId == userId).ToListAsync();
+            if (chats == null || !chats.Any())
+            {
+                return NotFound(new { Message = "Чатов нет" });
+            }
+            return Ok(chats);
+        }
     }
 }
