@@ -18,7 +18,7 @@ namespace MessengerServer.Controllers
             _context = context;
         }
 
-        [HttpGet("authorization")] // тут получения пользователя для авторизации
+        [HttpGet("authorization")] // получение пользователя для авторизации
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login && u.PasswordHash == password);
