@@ -1,3 +1,4 @@
+using MessengerServer.Hubs;
 using MessengerServer.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
@@ -11,13 +12,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))); // это настройка соединения с бд
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))); // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅ
 
 List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
 
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
-app.Urls.Add("https://192.168.0.11:7243/"); // дабавил url своего сервера
+app.Urls.Add("https://192.168.0.11:7243/"); // 192.168.0.11:7243 and my phone ip: 192.168.88.29
+
+//app.MapHub<ChatHub>("chatHub"); // 
+app.MapControllers();
 
 if (app.Environment.IsDevelopment())
 {
