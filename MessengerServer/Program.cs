@@ -22,7 +22,7 @@ var app = builder.Build();
 
 app.Urls.Add("https://192.168.0.11:7243/"); // 192.168.0.11:7243 and my phone ip: 192.168.88.29
 
-//app.MapHub<ChatHub>("chatHub"); // 
+app.MapHub<ChatHub>("chatHub"); // 
 app.MapControllers();
 
 if (app.Environment.IsDevelopment())

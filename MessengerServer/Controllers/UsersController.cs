@@ -32,12 +32,15 @@ namespace MessengerServer.Controllers
         [HttpGet("chats/{userId}")] // тут получение списка чатов пользователя для отображения их в клиентской части
         public async Task<ActionResult<List<Chat>>> GetUserChats(int userId)
         {
-            var chats = await _context.Chats.Where(c => c.ChatMembers.First().UserId == userId).ToListAsync();
-            Console.WriteLine(chats);
+            var chats = await _context.Chats
+                .Where(c => c.ChatMembers.Any(cm => cm.UserId == userId))
+                .ToListAsync();
+
             if (chats == null || !chats.Any())
             {
                 return NotFound(new { Message = "Чатов нет" });
             }
+
             return Ok(chats);
         }
 
