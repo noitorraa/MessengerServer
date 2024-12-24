@@ -1,19 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using MessengerServer.Model;
 
 namespace MessengerServer.Model;
 
 public partial class MessengerDataBaseContext : DbContext
 {
-    
     public MessengerDataBaseContext()
-    {
-    }
-
-    public MessengerDataBaseContext(DbContextOptions<MessengerDataBaseContext> options)
-        : base(options)
     {
     }
 
@@ -26,7 +19,12 @@ public partial class MessengerDataBaseContext : DbContext
         }
         return model;
     }
-   
+
+    public MessengerDataBaseContext(DbContextOptions<MessengerDataBaseContext> options)
+        : base(options)
+    {
+    }
+
     public virtual DbSet<Chat> Chats { get; set; }
 
     public virtual DbSet<ChatMember> ChatMembers { get; set; }
@@ -40,7 +38,7 @@ public partial class MessengerDataBaseContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-//warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
         => optionsBuilder.UseSqlServer("Server=localhost;Database=MessengerDataBase;Trusted_Connection=True;TrustServerCertificate=True");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -167,8 +165,6 @@ public partial class MessengerDataBaseContext : DbContext
 
             entity.ToTable("users");
 
-            entity.HasIndex(e => e.Email, "UQ__users__AB6E616419C12443").IsUnique();
-
             entity.HasIndex(e => e.Username, "UQ__users__F3DBC57211916948").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("user_id");
@@ -176,9 +172,6 @@ public partial class MessengerDataBaseContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
-            entity.Property(e => e.Email)
-                .HasMaxLength(100)
-                .HasColumnName("email");
             entity.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");

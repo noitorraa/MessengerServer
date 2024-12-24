@@ -1,9 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MessengerServer.Model;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Org.BouncyCastle.Crypto.Generators;
 
 namespace MessengerServer.Controllers
 {
@@ -18,14 +16,16 @@ namespace MessengerServer.Controllers
             _context = context;
         }
 
-        [HttpGet("authorization")] // получение пользователя для авторизации
+        [HttpGet("authorization")]
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login && u.PasswordHash == password);
-            if (user == null)
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login);
+
+            if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 return NotFound(new { Message = "Пользователь не найден" });
             }
+
             return Ok(user);
         }
 
@@ -62,6 +62,44 @@ namespace MessengerServer.Controllers
             }
 
             return Ok(messages);
+        }
+
+        [HttpPost("registration")]
+        public async Task<IActionResult> Registration([FromBody] User user)
+        {
+            if (await _context.Users.AnyAsync(u => u.Username == user.Username))
+            {
+                return Conflict(new { Message = "Username already exists." });
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            // Хешируем пароль перед сохранением
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "User registered successfully." });
+        }
+
+        [HttpGet("search")]
+        public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
+        {
+            // Ищем пользователей, у которых логин содержит переданную строку
+            var users = await _context.Users
+                                      .Where(u => u.Username.Contains(login))
+                                      .ToListAsync();
+
+            if (users == null || !users.Any())
+            {
+                return NotFound(new { Message = "Пользователи не найдены" });
+            }
+
+            return Ok(users);
         }
     }
 }

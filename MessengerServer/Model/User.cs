@@ -11,8 +11,6 @@ public partial class User
 
     public string PasswordHash { get; set; } = null!;
 
-    public string Email { get; set; } = null!;
-
     public DateTime? CreatedAt { get; set; }
 
     public virtual ICollection<ChatMember> ChatMembers { get; set; } = new List<ChatMember>();

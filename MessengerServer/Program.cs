@@ -1,8 +1,8 @@
 using MessengerServer.Hubs;
 using MessengerServer.Model;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using System;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +12,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))); // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅ
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
 
@@ -38,3 +38,9 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+
+// Проблемы приложения: при отправке сообщений сообщения не сохраняются в бд для конкретного пользователя, но 
+// в одном из чатов все отправленные сообщения для всех пользователей в этом чате сохраняются
+// также при отправке сообщений возникала ошибка not set on reference или топа того
+// смайлики отправляются нормально, поиск работает
