@@ -3,6 +3,7 @@ using MessengerServer.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,9 +21,7 @@ builder.Services.AddSignalR();
 
 var app = builder.Build();
 
-app.Urls.Add("https://192.168.0.11:7243/"); // 192.168.0.11:7243 and my phone ip: 192.168.88.29
-
-app.MapHub<ChatHub>("chatHub"); // 
+app.MapHub<ChatHub>("chatHub");
 app.MapControllers();
 
 if (app.Environment.IsDevelopment())

@@ -13,22 +13,17 @@ namespace MessengerServer.Hubs
             _context = context;
         }
 
-        public async Task SendMessage(int userId, string message)
+        public async Task SendMessage(int userId, string message, int chatid)
         {
             try
             {
-                Chat chat = _context.Chats.Where(ch => ch.ChatMembers.FirstOrDefault().UserId == userId).FirstOrDefault();
-
                 var connection = _context.Database.GetDbConnection();
-                connection.Open();
-                connection.Close(); //test
-
-                var newMessage = new Message
+                var newMessage = new Message // ХУЙНЯ, чета напутал с senderId и ChatId
                 {
                     Content = message,
                     CreatedAt = DateTime.Now,
                     SenderId = userId,
-                    ChatId = chat.ChatId// Укажите правильный ChatId
+                    ChatId = chatid// правильный ChatId нада указывать
                 };
 
                 _context.Messages.Add(newMessage);
