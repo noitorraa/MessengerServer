@@ -38,8 +38,10 @@ public partial class MessengerDataBaseContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=localhost;Database=MessengerDataBase;Trusted_Connection=True;TrustServerCertificate=True");
+            => optionsBuilder.UseMySql(
+                "Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;",
+                ServerVersion.AutoDetect("Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;")
+            );
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
