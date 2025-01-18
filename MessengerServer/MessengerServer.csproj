@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Folder Include="Model\" />
+    <Folder Include="Properties\PublishProfiles\" />
   </ItemGroup>
 
 </Project>
