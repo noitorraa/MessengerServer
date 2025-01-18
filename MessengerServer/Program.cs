@@ -14,7 +14,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
     options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"),
-    ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))));
+    ServerVersion.Parse("8.0")));
 
 List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
 
