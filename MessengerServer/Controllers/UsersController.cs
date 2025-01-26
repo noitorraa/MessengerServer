@@ -127,6 +127,20 @@ namespace MessengerServer.Controllers
             return Ok(chat);
         }
 
+        [HttpGet("chats/existing")]
+        public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
+        {
+            var chat = await _context.Chats
+                .Include(c => c.ChatMembers)
+                .FirstOrDefaultAsync(c =>
+                    c.ChatMembers.Any(cm => cm.UserId == user1Id) &&
+                    c.ChatMembers.Any(cm => cm.UserId == user2Id) &&
+                    c.ChatMembers.Count == 2
+                );
+
+            return chat != null ? Ok(chat) : NotFound();
+        }
+
         public class ChatCreationRequest
         {
             public string ChatName { get; set; }
