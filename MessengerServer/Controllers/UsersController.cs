@@ -101,5 +101,36 @@ namespace MessengerServer.Controllers
 
             return Ok(users);
         }
+
+        [HttpPost("chats")]
+        public async Task<ActionResult<Chat>> CreateChat([FromBody] ChatCreationRequest request)
+        {
+            var chat = new Chat
+            {
+                ChatName = request.ChatName,
+                CreatedAt = DateTime.Now
+            };
+
+            _context.Chats.Add(chat);
+            await _context.SaveChangesAsync();
+
+            foreach (var userId in request.UserIds)
+            {
+                _context.ChatMembers.Add(new ChatMember
+                {
+                    ChatId = chat.ChatId,
+                    UserId = userId
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(chat);
+        }
+
+        public class ChatCreationRequest
+        {
+            public string ChatName { get; set; }
+            public List<int> UserIds { get; set; }
+        }
     }
 }

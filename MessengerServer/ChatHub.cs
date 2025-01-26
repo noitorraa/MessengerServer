@@ -18,7 +18,7 @@ namespace MessengerServer.Hubs
             try
             {
                 var connection = _context.Database.GetDbConnection();
-                var newMessage = new Message // ХУЙНЯ, чета напутал с senderId и ChatId
+                var newMessage = new Message 
                 {
                     Content = message,
                     CreatedAt = DateTime.Now,
