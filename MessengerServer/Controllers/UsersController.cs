@@ -64,6 +64,27 @@ namespace MessengerServer.Controllers
             return Ok(messages);
         }
 
+        [HttpDelete("chats/{chatId}")]
+        public async Task<IActionResult> DeleteChat(int chatId)
+        {
+            var chat = await _context.Chats
+                .Include(c => c.ChatMembers)
+                .Include(c => c.Messages)
+                .FirstOrDefaultAsync(c => c.ChatId == chatId);
+
+            if (chat == null)
+                return NotFound(new { Message = "Чат не найден" });
+
+            _context.Messages.RemoveRange(chat.Messages);
+
+            _context.ChatMembers.RemoveRange(chat.ChatMembers);
+
+            _context.Chats.Remove(chat);
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Чат успешно удален" });
+        }
+
         [HttpPost("registration")]
         public async Task<IActionResult> Registration([FromBody] User user)
         {
