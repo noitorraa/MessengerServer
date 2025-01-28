@@ -30,7 +30,7 @@ namespace MessengerServer.Hubs
                 await _context.SaveChangesAsync();
 
                 // Отправляем сообщение всем клиентам
-                await Clients.All.SendAsync("ReceiveMessage", userId, message);
+                await Clients.OthersInGroup(chatid.ToString()).SendAsync("ReceiveMessage", userId, message)
             }
             catch (Exception ex)
             {
