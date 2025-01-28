@@ -2,6 +2,9 @@
 using Microsoft.EntityFrameworkCore;
 using MessengerServer.Model;
 using Org.BouncyCastle.Crypto.Generators;
+using Microsoft.Extensions.DependencyInjection;
+using MessengerServer.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MessengerServer.Controllers
 {
@@ -10,10 +13,12 @@ namespace MessengerServer.Controllers
     public class UsersController : ControllerBase
     {
         private readonly MessengerDataBaseContext _context;
+        private readonly IServiceProvider _serviceProvider;
 
-        public UsersController(MessengerDataBaseContext context)
+        public UsersController(MessengerDataBaseContext context, IServiceProvider serviceProvider)
         {
             _context = context;
+            _serviceProvider = serviceProvider;
         }
 
         [HttpGet("authorization")]
@@ -142,6 +147,9 @@ namespace MessengerServer.Controllers
                     ChatId = chat.ChatId,
                     UserId = userId
                 });
+
+                var hubContext = _serviceProvider.GetRequiredService<IHubContext<ChatHub>>();
+                await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat);
             }
 
             await _context.SaveChangesAsync();

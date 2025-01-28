@@ -38,5 +38,10 @@ namespace MessengerServer.Hubs
                 throw new HubException("Ошибка при отправке сообщения", ex);
             }
         }
+
+        public async Task NotifyNewChat(int userId, Chat chat)
+        {
+            await Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat);
+        }
     }
 }
