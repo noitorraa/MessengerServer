@@ -13,28 +13,36 @@ namespace MessengerServer.Hubs
             _context = context;
         }
 
-        public async Task SendMessage(int userId, string message, int chatid)
+        public async Task SendMessage(int userId, string message, int chatId)
         {
             try
             {
-                var connection = _context.Database.GetDbConnection();
-                var newMessage = new Message 
+                var newMessage = new Message
                 {
                     Content = message,
                     CreatedAt = DateTime.Now,
                     SenderId = userId,
-                    ChatId = chatid// правильный ChatId нада указывать
+                    ChatId = chatId
                 };
-
                 _context.Messages.Add(newMessage);
                 await _context.SaveChangesAsync();
 
                 // Отправляем сообщение всем клиентам
-                await Clients.OthersInGroup(chatid.ToString()).SendAsync("ReceiveMessage", userId, message);
+                await Clients.All.SendAsync("ReceiveMessage", userId, message);
+
+                // Уведомляем пользователей чата о новом сообщении
+                var chatMembers = await _context.ChatMembers
+                    .Where(cm => cm.ChatId == chatId)
+                    .Select(cm => cm.UserId)
+                    .ToListAsync();
+                foreach (var memberId in chatMembers)
+                {
+                    await Clients.User(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Ошибка в хабе при отправке сообщения " + ex.ToString());
+                Console.WriteLine("Ошибка в хабе при отправке сообщения: " + ex.ToString());
                 throw new HubException("Ошибка при отправке сообщения", ex);
             }
         }
