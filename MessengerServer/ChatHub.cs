@@ -13,6 +13,18 @@ namespace MessengerServer.Hubs
             _context = context;
         }
 
+        public override async Task OnConnectedAsync()
+        {
+            // Связываем подключение с пользователем
+            var userId = Context.GetHttpContext().Request.Headers["UserId"];
+            if (!string.IsNullOrEmpty(userId))
+            {
+                Context.Items["UserId"] = userId;
+                await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+            }
+            await base.OnConnectedAsync();
+        }
+
         public async Task SendMessage(int userId, string message, int chatId)
         {
             try
@@ -30,10 +42,11 @@ namespace MessengerServer.Hubs
                 // Уведомляем пользователей чата о новом сообщении
                 var chatMembers = await _context.ChatMembers
                     .Where(cm => cm.ChatId == chatId)
+                    .Select(cm => cm.UserId)
                     .ToListAsync();
                 foreach (var memberId in chatMembers)
                 {
-                    await Clients.User(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
+                    await Clients.Group(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
                     Console.WriteLine("Сообщение отправлено: " + memberId);
                 }
             }
