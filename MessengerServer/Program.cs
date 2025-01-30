@@ -40,6 +40,7 @@ builder.Services.AddSignalR();
 
 var app = builder.Build();
 
+app.UseCors("AllowAll");
 app.MapHub<ChatHub>("/chatHub");
 app.MapControllers();
 
@@ -54,8 +55,6 @@ else
 }
 
 app.UseAuthorization();
-
-app.UseCors("AllowAll");
 
 app.MapControllers();
 
