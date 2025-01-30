@@ -27,17 +27,14 @@ namespace MessengerServer.Hubs
                 _context.Messages.Add(newMessage);
                 await _context.SaveChangesAsync();
 
-                // Отправляем сообщение всем клиентам
-                await Clients.All.SendAsync("ReceiveMessage", userId, message);
-
                 // Уведомляем пользователей чата о новом сообщении
                 var chatMembers = await _context.ChatMembers
                     .Where(cm => cm.ChatId == chatId)
-                    .Select(cm => cm.UserId)
                     .ToListAsync();
                 foreach (var memberId in chatMembers)
                 {
                     await Clients.User(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
+                    Console.WriteLine("Сообщение отправлено: " + memberId);
                 }
             }
             catch (Exception ex)
