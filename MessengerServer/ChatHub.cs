@@ -47,7 +47,7 @@ namespace MessengerServer.Hubs
                 foreach (var memberId in chatMembers)
                 {
                     await Clients.Group(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
-                    Console.WriteLine("Сообщение отправлено: " + memberId);
+                    Console.WriteLine("Сообщение отправлено: " + memberId + ". В группе(clients) " + Clients.ToString());
                 }
             }
             catch (Exception ex)
