@@ -40,7 +40,7 @@ builder.Services.AddSignalR();
 
 var app = builder.Build();
 
-app.MapHub<ChatHub>("chatHub");
+app.MapHub<ChatHub>("/chatHub");
 app.MapControllers();
 
 if (app.Environment.IsDevelopment())
