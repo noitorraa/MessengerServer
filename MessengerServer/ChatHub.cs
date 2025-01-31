@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace MessengerServer.Hubs
 {
-    public class TestHub : Hub
+    public class ChatHub : Hub
     {
         public async Task SendToGroup(string groupName, string message)
         {
