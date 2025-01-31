@@ -48,6 +48,7 @@ namespace MessengerServer.Hubs
                     ChatId = (int)newMessage.ChatId,
                     SenderName = _context.Users.Find(userId)?.Username
                 });
+                Console.WriteLine($"Отправлено в группу {chatId} через метод ReceiveNewMessage");
             }
             catch (Exception ex)
             {
@@ -59,11 +60,17 @@ namespace MessengerServer.Hubs
         public async Task JoinChat(string chatId)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, chatId);
+            Console.WriteLine($"Пользователь {Context.Items["UserId"]} вошел в чат {chatId}");
         }
 
         public async Task NotifyNewChat(int userId, Chat chat)
         {
             await Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat);
+        }
+
+        public async Task Ping(string message) // тест
+        {
+            await Clients.Caller.SendAsync("Pong", message);
         }
     }
 }
