@@ -49,7 +49,6 @@ namespace MessengerServer.Hubs
                     SenderName = _context.Users.Find(userId)?.Username
                 });
                 var group = Clients.Group(groupName);
-                Console.WriteLine($"Количество получателей в группе: {((IReadOnlyList<string>)group).Count}");
                 Console.WriteLine($"Отправлено в группу {chatId} через метод ReceiveNewMessage");
             }
             catch (Exception ex)
