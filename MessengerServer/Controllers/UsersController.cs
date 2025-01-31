@@ -49,22 +49,21 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/messages")] // получение сообщений в чате
-        public async Task<ActionResult<List<Message>>> GetChatMessages(int chatId)
+        [HttpGet("chats/{chatId}/messages")]
+        public async Task<ActionResult<List<MessageDto>>> GetChatMessages(int chatId)
         {
-            var chatMembers = await _context.ChatMembers
-                .Where(cm => cm.ChatId == chatId)
-                .Select(cm => cm.UserId)
-                .ToListAsync();
-
             var messages = await _context.Messages
-                .Where(m => m.ChatId == chatId && chatMembers.Contains((int)m.SenderId))
+                .Where(m => m.ChatId == chatId)
+                .Select(m => new MessageDto
+                {
+                    Id = m.MessageId,
+                    Content = m.Content,
+                    CreatedAt = (DateTime)m.CreatedAt,
+                    SenderId = (int)m.SenderId,
+                    ChatId = (int)m.ChatId,
+                    SenderName = m.Sender.Username // Пример, если есть связь с User
+                })
                 .ToListAsync();
-            Console.WriteLine(messages);
-            if (messages == null || !messages.Any())
-            {
-                return NotFound(new { Message = "Сообщения не найдены" });
-            }
 
             return Ok(messages);
         }
@@ -175,5 +174,15 @@ namespace MessengerServer.Controllers
             public string ChatName { get; set; }
             public List<int> UserIds { get; set; }
         }
+    }
+
+    public class MessageDto
+    {
+        public int Id { get; set; }
+        public string Content { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public int SenderId { get; set; }
+        public int ChatId { get; set; }
+        public string SenderName { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using MessengerServer.Model;
+﻿using MessengerServer.Controllers;
+using MessengerServer.Model;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
@@ -15,12 +16,11 @@ namespace MessengerServer.Hubs
 
         public override async Task OnConnectedAsync()
         {
-            // Связываем подключение с пользователем
             var userId = Context.GetHttpContext().Request.Headers["UserId"];
             if (!string.IsNullOrEmpty(userId))
             {
-                Context.Items["UserId"] = userId;
-                await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+                // Добавляем в группу пользователя (для личных сообщений)
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
             }
             await base.OnConnectedAsync();
         }
@@ -39,17 +39,15 @@ namespace MessengerServer.Hubs
                 _context.Messages.Add(newMessage);
                 await _context.SaveChangesAsync();
 
-                // Уведомляем пользователей чата о новом сообщении
-                var chatMembers = await _context.ChatMembers
-                    .Where(cm => cm.ChatId == chatId)
-                    .Select(cm => cm.UserId)
-                    .ToListAsync();
-                foreach (var memberId in chatMembers)
+                await Clients.Group(chatId.ToString()).SendAsync("ReceiveNewMessage", new MessageDto
                 {
-                    await Clients.All.SendAsync("ReceiveNewMessage", newMessage);
-                    //await Clients.Group(memberId.ToString()).SendAsync("ReceiveNewMessage", newMessage);
-                    Console.WriteLine("Сообщение отправлено: " + memberId);
-                }
+                    Id = newMessage.MessageId,
+                    Content = newMessage.Content,
+                    CreatedAt = (DateTime)newMessage.CreatedAt,
+                    SenderId = (int)newMessage.SenderId,
+                    ChatId = (int)newMessage.ChatId,
+                    SenderName = _context.Users.Find(userId)?.Username
+                });
             }
             catch (Exception ex)
             {
