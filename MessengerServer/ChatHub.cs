@@ -56,6 +56,11 @@ namespace MessengerServer.Hubs
             }
         }
 
+        public async Task JoinChat(string chatId)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, chatId);
+        }
+
         public async Task NotifyNewChat(int userId, Chat chat)
         {
             await Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat);
