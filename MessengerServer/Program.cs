@@ -36,7 +36,9 @@ builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
 
 List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
 
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(hubOptions => {
+    hubOptions.EnableDetailedErrors = true;
+});
 
 var app = builder.Build();
 

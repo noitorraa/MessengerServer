@@ -38,8 +38,8 @@ namespace MessengerServer.Hubs
                 };
                 _context.Messages.Add(newMessage);
                 await _context.SaveChangesAsync();
-
-                await Clients.Group(chatId.ToString()).SendAsync("ReceiveNewMessage", new MessageDto
+                var groupName = $"chat_{chatId}";
+                await Clients.Group(groupName).SendAsync("ReceiveNewMessage", new MessageDto
                 {
                     Id = newMessage.MessageId,
                     Content = newMessage.Content,
@@ -48,6 +48,8 @@ namespace MessengerServer.Hubs
                     ChatId = (int)newMessage.ChatId,
                     SenderName = _context.Users.Find(userId)?.Username
                 });
+                var group = Clients.Group(groupName);
+                Console.WriteLine($"Количество получателей в группе: {((IReadOnlyList<string>)group).Count}");
                 Console.WriteLine($"Отправлено в группу {chatId} через метод ReceiveNewMessage");
             }
             catch (Exception ex)
@@ -59,8 +61,9 @@ namespace MessengerServer.Hubs
 
         public async Task JoinChat(string chatId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, chatId);
-            Console.WriteLine($"Пользователь {Context.Items["UserId"]} вошел в чат {chatId}");
+            var groupName = $"chat_{chatId}"; // Добавляем префикс
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            Console.WriteLine($"Пользователь {Context.UserIdentifier} вошел в чат {groupName}");
         }
 
         public async Task NotifyNewChat(int userId, Chat chat)
