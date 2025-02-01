@@ -5,6 +5,7 @@ using Org.BouncyCastle.Crypto.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using MessengerServer.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNet.SignalR;
 
 namespace MessengerServer.Controllers
 {
@@ -13,6 +14,7 @@ namespace MessengerServer.Controllers
     public class UsersController : ControllerBase
     {
         private readonly MessengerDataBaseContext _context;
+        private ChatHub _chatHub;
         private readonly IServiceProvider _serviceProvider;
 
         public UsersController(MessengerDataBaseContext context, IServiceProvider serviceProvider)
@@ -134,18 +136,21 @@ namespace MessengerServer.Controllers
 
             foreach (var userId in request.UserIds)
             {
-                _context.ChatMembers.Add(new ChatMember
-                {
-                    ChatId = chat.ChatId,
-                    UserId = userId
-                });
-
-                var hubContext = _serviceProvider.GetRequiredService<IHubContext<ChatHub>>();
-                await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat);
+                // Отправляем только ID нового чата
+                await _chatHub.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
             }
 
-            await _context.SaveChangesAsync();
             return Ok(chat);
+        }
+
+        [HttpGet("chats/{chatId}")]
+        public async Task<ActionResult<Chat>> GetChatById(int chatId)
+        {
+            var chat = await _context.Chats
+                .Include(c => c.ChatMembers)
+                .FirstOrDefaultAsync(c => c.ChatId == chatId);
+
+            return chat != null ? Ok(chat) : NotFound();
         }
 
         [HttpGet("chats/existing")]
@@ -167,15 +172,5 @@ namespace MessengerServer.Controllers
             public string ChatName { get; set; }
             public List<int> UserIds { get; set; }
         }
-    }
-
-    public class MessageDto
-    {
-        public int Id { get; set; }
-        public string Content { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public int SenderId { get; set; }
-        public int ChatId { get; set; }
-        public string SenderName { get; set; }
     }
 }
