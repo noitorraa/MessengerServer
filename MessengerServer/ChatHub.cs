@@ -8,14 +8,36 @@ namespace MessengerServer.Hubs
 {
     public class ChatHub : Hub
     {
-        public async Task SendToGroup(string groupName, string message)
+        private readonly MessengerDataBaseContext _context;
+
+        public ChatHub(MessengerDataBaseContext context)
         {
-            await Clients.Group(groupName).SendAsync("ReceiveTest", message);
+            _context = context;
         }
 
-        public async Task JoinGroup(string groupName)
+        // Отправка сообщения в группу чата
+        public async Task SendMessage(int userId, string message, int chatId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            // Сохранение сообщения в БД
+            var newMessage = new Message
+            {
+                Content = message,
+                SenderId = userId,
+                ChatId = chatId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Messages.Add(newMessage);
+            await _context.SaveChangesAsync();
+
+            // Отправка сообщения в группу чата
+            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", message);
+        }
+
+        // Вход в группу чата
+        public async Task JoinChat(int chatId)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{chatId}");
+            Console.WriteLine($"Пользователь вошел в чат: chat_{chatId}");
         }
     }
 }

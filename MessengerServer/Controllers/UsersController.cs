@@ -50,19 +50,12 @@ namespace MessengerServer.Controllers
         }
 
         [HttpGet("chats/{chatId}/messages")]
-        public async Task<ActionResult<List<MessageDto>>> GetChatMessages(int chatId)
+        public async Task<ActionResult<List<string>>> GetChatMessages(int chatId)
         {
             var messages = await _context.Messages
                 .Where(m => m.ChatId == chatId)
-                .Select(m => new MessageDto
-                {
-                    Id = m.MessageId,
-                    Content = m.Content,
-                    CreatedAt = (DateTime)m.CreatedAt,
-                    SenderId = (int)m.SenderId,
-                    ChatId = (int)m.ChatId,
-                    SenderName = m.Sender.Username // Пример, если есть связь с User
-                })
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => m.Content)
                 .ToListAsync();
 
             return Ok(messages);
