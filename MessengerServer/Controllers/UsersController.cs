@@ -36,17 +36,24 @@ namespace MessengerServer.Controllers
             return Ok(user);
         }
 
-        [HttpGet("chats/{userId}")] // тут получение списка чатов пользователя для отображения их в клиентской части
-        public async Task<ActionResult<List<Chat>>> GetUserChats(int userId)
+        [HttpGet("chats/{userId}")]
+        public async Task<ActionResult<List<ChatDto>>> GetUserChats(int userId)
         {
             var chats = await _context.Chats
                 .Where(c => c.ChatMembers.Any(cm => cm.UserId == userId))
+                .Include(c => c.ChatMembers)
+                .ThenInclude(cm => cm.User)
+                .Select(c => new ChatDto
+                {
+                    ChatId = c.ChatId,
+                    Members = c.ChatMembers.Select(cm => new UserDto
+                    {
+                        UserId = cm.User.UserId,
+                        Username = cm.User.Username
+                    }).ToList(),
+                    CreatedAt = (DateTime)c.CreatedAt
+                })
                 .ToListAsync();
-
-            if (chats == null || !chats.Any())
-            {
-                return NotFound(new { Message = "Чатов нет" });
-            }
 
             return Ok(chats);
         }
@@ -195,6 +202,19 @@ namespace MessengerServer.Controllers
                 );
 
             return chat != null ? Ok(chat) : NotFound();
+        }
+
+        public class ChatDto
+        {
+            public int ChatId { get; set; }
+            public List<UserDto> Members { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+
+        public class UserDto
+        {
+            public int UserId { get; set; }
+            public string Username { get; set; }
         }
 
         public class ChatCreationRequest
