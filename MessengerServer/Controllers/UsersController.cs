@@ -125,22 +125,54 @@ namespace MessengerServer.Controllers
         [HttpPost("chats")]
         public async Task<ActionResult<Chat>> CreateChat([FromBody] ChatCreationRequest request)
         {
-            var chat = new Chat
+            using (var transaction = await _context.Database.BeginTransactionAsync())
             {
-                ChatName = request.ChatName,
-                CreatedAt = DateTime.Now
-            };
+                try
+                {
+                    // Создание чата
+                    var chat = new Chat
+                    {
+                        ChatName = request.ChatName,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Chats.Add(chat);
+                    await _context.SaveChangesAsync();
 
-            _context.Chats.Add(chat);
-            await _context.SaveChangesAsync();
+                    // Проверка и добавление участников
+                    foreach (var userId in request.UserIds)
+                    {
+                        var userExists = await _context.Users.AnyAsync(u => u.UserId == userId);
+                        if (!userExists)
+                        {
+                            await transaction.RollbackAsync();
+                            return BadRequest($"Пользователь {userId} не найден.");
+                        }
 
-            foreach (var userId in request.UserIds)
-            {
-                // Отправляем только ID нового чата
-                await _chatHub.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
+                        _context.ChatMembers.Add(new ChatMember
+                        {
+                            ChatId = chat.ChatId,
+                            UserId = userId
+                        });
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Отправка уведомлений через SignalR
+                    foreach (var userId in request.UserIds)
+                    {
+                        var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+                        await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
+                    }
+
+                    return Ok(chat);
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, $"Ошибка: {ex.Message}");
+                }
             }
-
-            return Ok(chat);
         }
 
         //[HttpGet("chats/{chatId}")]
