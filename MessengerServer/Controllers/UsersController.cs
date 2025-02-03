@@ -176,11 +176,9 @@ namespace MessengerServer.Controllers
             await _context.SaveChangesAsync();
 
             // Отправляем уведомление через SignalR
-            foreach (var userId in request.UserIds)
-            {
-                var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
-                await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
-            }
+            var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+            await hubContext.Clients.Users(request.UserIds.Select(u => u.ToString()).ToList())
+                .SendAsync("NotifyUpdateChatList");
 
             return Ok(chat);
         }
