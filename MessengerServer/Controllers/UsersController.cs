@@ -125,54 +125,52 @@ namespace MessengerServer.Controllers
         [HttpPost("chats")]
         public async Task<ActionResult<Chat>> CreateChat([FromBody] ChatCreationRequest request)
         {
-            using (var transaction = await _context.Database.BeginTransactionAsync())
+            // Проверяем существующий чат между пользователями (только для чатов с двумя участниками)
+            if (request.UserIds.Count == 2)
             {
-                try
+                var existingChat = await _context.Chats
+                    .Include(c => c.ChatMembers)
+                    .FirstOrDefaultAsync(c =>
+                        c.ChatMembers.All(cm => request.UserIds.Contains(cm.UserId)) &&
+                        c.ChatMembers.Count == 2
+                    );
+
+                if (existingChat != null)
                 {
-                    // Создание чата
-                    var chat = new Chat
-                    {
-                        ChatName = request.ChatName,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Chats.Add(chat);
-                    await _context.SaveChangesAsync();
-
-                    // Проверка и добавление участников
-                    foreach (var userId in request.UserIds)
-                    {
-                        var userExists = await _context.Users.AnyAsync(u => u.UserId == userId);
-                        if (!userExists)
-                        {
-                            await transaction.RollbackAsync();
-                            return BadRequest($"Пользователь {userId} не найден.");
-                        }
-
-                        _context.ChatMembers.Add(new ChatMember
-                        {
-                            ChatId = chat.ChatId,
-                            UserId = userId
-                        });
-                    }
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    // Отправка уведомлений через SignalR
-                    foreach (var userId in request.UserIds)
-                    {
-                        var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
-                        await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
-                    }
-
-                    return Ok(chat);
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    return StatusCode(500, $"Ошибка: {ex.Message}");
+                    return Ok(existingChat); // Возвращаем существующий чат
                 }
             }
+
+            // Создаём новый чат, если дубликата нет
+            var chat = new Chat
+            {
+                ChatName = "", // Поле больше не используется для личных чатов
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Chats.Add(chat);
+            await _context.SaveChangesAsync();
+
+            // Добавляем участников
+            foreach (var userId in request.UserIds)
+            {
+                _context.ChatMembers.Add(new ChatMember
+                {
+                    ChatId = chat.ChatId,
+                    UserId = userId
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Отправляем уведомление через SignalR
+            foreach (var userId in request.UserIds)
+            {
+                var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+                await hubContext.Clients.User(userId.ToString()).SendAsync("ReceiveNewChat", chat.ChatId);
+            }
+
+            return Ok(chat);
         }
 
         //[HttpGet("chats/{chatId}")]
