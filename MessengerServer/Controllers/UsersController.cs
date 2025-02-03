@@ -148,6 +148,11 @@ namespace MessengerServer.Controllers
                 }
             }
 
+            if (request.UserIds.Count > 2 && string.IsNullOrEmpty(request.ChatName))
+            {
+                request.ChatName = "New chat";
+            }
+
             // Создаём новый чат, если дубликата нет
             var chat = new Chat
             {
