@@ -143,15 +143,15 @@ namespace MessengerServer.Controllers
             return Ok(chat);
         }
 
-        [HttpGet("chats/{chatId}")]
-        public async Task<ActionResult<Chat>> GetChatById(int chatId)
-        {
-            var chat = await _context.Chats
-                .Include(c => c.ChatMembers)
-                .FirstOrDefaultAsync(c => c.ChatId == chatId);
+        //[HttpGet("chats/{chatId}")]
+        //public async Task<ActionResult<Chat>> GetChatById(int chatId)
+        //{
+        //    var chat = await _context.Chats
+        //        .Include(c => c.ChatMembers)
+        //        .FirstOrDefaultAsync(c => c.ChatId == chatId);
 
-            return chat != null ? Ok(chat) : NotFound();
-        }
+        //    return chat != null ? Ok(chat) : NotFound();
+        //}
 
         [HttpGet("chats/existing")]
         public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
