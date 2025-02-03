@@ -39,5 +39,10 @@ namespace MessengerServer.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{chatId}");
             Console.WriteLine($"Пользователь вошел в чат: chat_{chatId}");
         }
+
+        public async Task NotifyNewChat(int chatId)
+        {
+            await Clients.All.SendAsync("ReceiveNewChat", chatId);
+        }
     }
 }
