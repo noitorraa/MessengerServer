@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MessengerServer.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNet.SignalR;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace MessengerServer.Controllers
 {
@@ -88,6 +89,10 @@ namespace MessengerServer.Controllers
             _context.Chats.Remove(chat);
 
             await _context.SaveChangesAsync();
+
+            var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+            await hubContext.Clients.Users(chat.ChatMembers.Select(cm => cm.UserId.ToString()).ToList()).SendAsync("NotifyUpdateChatList");
+
             return Ok(new { Message = "Чат успешно удален" });
         }
 
