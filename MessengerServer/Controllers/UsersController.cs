@@ -59,13 +59,18 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/messages")]
-        public async Task<ActionResult<List<string>>> GetChatMessages(int chatId)
+        [HttpGet("chats/{chatId}/{_userId}/messages")]
+        public async Task<ActionResult<List<MessageDto>>> GetChatMessages(int chatId, int _userId)
         {
             var messages = await _context.Messages
                 .Where(m => m.ChatId == chatId)
                 .OrderBy(m => m.CreatedAt)
-                .Select(m => m.Content)
+                .Select(m => new MessageDto
+                {
+                    Content = m.Content,
+                    UserID = (int)m.SenderId, // Логика определения отправителя
+                    CreatedAt = (DateTime)m.CreatedAt
+                })
                 .ToListAsync();
 
             return Ok(messages);
@@ -210,6 +215,13 @@ namespace MessengerServer.Controllers
                 );
 
             return chat != null ? Ok(chat) : NotFound();
+        }
+
+        public class MessageDto
+        {
+            public string Content { get; set; }
+            public int UserID { get; set; } // Или UserId, если нужно
+            public DateTime CreatedAt { get; set; }
         }
 
         public class ChatDto

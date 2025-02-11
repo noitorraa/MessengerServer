@@ -3,6 +3,7 @@ using MessengerServer.Model;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
+using static MessengerServer.Controllers.UsersController;
 
 namespace MessengerServer.Hubs
 {
@@ -28,7 +29,12 @@ namespace MessengerServer.Hubs
             };
             _context.Messages.Add(newMessage);
             await _context.SaveChangesAsync();
-
+            var MessageToClient = new MessageDto()
+            {
+                Content = message,
+                UserID = userId,
+                CreatedAt = DateTime.UtcNow
+            };
             // Отправка сообщения в группу чата
             await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", message);
         }
