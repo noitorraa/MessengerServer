@@ -220,7 +220,7 @@ namespace MessengerServer.Controllers
         public class MessageDto
         {
             public string Content { get; set; }
-            public int UserID { get; set; } // Или UserId, если нужно
+            public int UserID { get; set; } 
             public DateTime CreatedAt { get; set; }
         }
 
