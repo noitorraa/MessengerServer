@@ -7,6 +7,7 @@ using MessengerServer.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNet.SignalR;
 using Org.BouncyCastle.Asn1.Ocsp;
+using Newtonsoft.Json;
 
 namespace MessengerServer.Controllers
 {
@@ -63,17 +64,22 @@ namespace MessengerServer.Controllers
         public async Task<ActionResult<List<MessageDto>>> GetChatMessages(int chatId, int _userId)
         {
             var messages = await _context.Messages
-                .Where(m => m.ChatId == chatId)
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new MessageDto
-                {
-                    Content = m.Content,
-                    UserID = (int)m.SenderId, // Логика определения отправителя
-                    CreatedAt = (DateTime)m.CreatedAt
-                })
-                .ToListAsync();
+            .Where(m => m.ChatId == chatId)
+            .Select(m => new MessageDto
+            {
+                MessageId = m.MessageId,
+                Content = m.Content,
+                UserID = (int)m.SenderId,
+                CreatedAt = (DateTime)m.CreatedAt,
+                IsRead = m.SenderId == _userId || // Если отправитель — текущий пользователь
+                    _context.MessageStatuses.Any(ms => 
+                        ms.MessageId == m.MessageId && 
+                        ms.UserId == _userId && 
+                        ms.Status)
+            })
+            .ToListAsync();
 
-            return Ok(messages);
+        return Ok(messages);
         }
 
         [HttpDelete("chats/{chatId}")]
@@ -219,9 +225,20 @@ namespace MessengerServer.Controllers
 
         public class MessageDto
         {
+            [JsonProperty("messageId")]
+            public int MessageId { get; set; } // Новое поле
+
+            [JsonProperty("content")]
             public string Content { get; set; }
-            public int UserID { get; set; } 
+
+            [JsonProperty("userID")]
+            public int UserID { get; set; }
+
+            [JsonProperty("createdAt")]
             public DateTime CreatedAt { get; set; }
+
+            [JsonProperty("isRead")]
+            public bool IsRead { get; set; }
         }
 
         public class ChatDto

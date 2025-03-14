@@ -2,6 +2,7 @@
 using MessengerServer.Model;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using System.Threading.Tasks;
 using static MessengerServer.Controllers.UsersController;
 
@@ -19,7 +20,7 @@ namespace MessengerServer.Hubs
         // Отправка сообщения в группу чата
         public async Task SendMessage(int userId, string message, int chatId)
         {
-            // Сохранение сообщения в БД
+            // Сохраняем сообщение
             var newMessage = new Message
             {
                 Content = message,
@@ -29,9 +30,55 @@ namespace MessengerServer.Hubs
             };
             _context.Messages.Add(newMessage);
             await _context.SaveChangesAsync();
-            
-            // Отправка сообщения в группу чата
-            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", message, userId);
+
+            // Получаем ID пользователей чата (кроме отправителя)
+            var chatUserIds = await _context.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+                .Select(cm => cm.UserId)
+                .ToListAsync();
+
+            // Создаем статусы "не прочитано"
+            if (chatUserIds.Any())
+            {
+                var statuses = chatUserIds.Select(uid => new MessageStatus
+                {
+                    MessageId = newMessage.MessageId,
+                    UserId = uid,
+                    Status = false,
+                    UpdatedAt = DateTime.UtcNow
+                }).ToList();
+
+                _context.MessageStatuses.AddRange(statuses);
+                await _context.SaveChangesAsync();
+            }
+
+            // Отправляем сообщение через SignalR
+            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage",
+            newMessage.Content,
+            newMessage.SenderId,
+            newMessage.MessageId); // Передаем MessageId
+        }
+
+        public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
+        {
+            var statuses = await _context.MessageStatuses
+                .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
+                .ToListAsync();
+
+            foreach (var status in statuses)
+            {
+                status.Status = true;
+                status.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Уведомляем клиентов
+            var chatId = statuses.FirstOrDefault()?.Message.ChatId;
+            if (chatId.HasValue)
+            {
+                await Clients.Group($"chat_{chatId.Value}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
+            }
         }
 
         // Вход в группу чата
