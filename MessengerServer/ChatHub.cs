@@ -59,9 +59,21 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
+            if (messageIds == null || !messageIds.Any())
+            {
+                Console.WriteLine("Ошибка: messageIds пустой или null.");
+                return;
+            }
+
             var statuses = await _context.MessageStatuses
                 .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
                 .ToListAsync();
+
+            if (statuses == null || !statuses.Any())
+            {
+                Console.WriteLine("Ошибка: Не найдены статусы сообщений.");
+                return;
+            }
 
             foreach (var status in statuses)
             {
@@ -76,7 +88,12 @@ namespace MessengerServer.Hubs
                 var chatId = statuses.First().Message.ChatId;
                 await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
             }
+            else
+            {
+                Console.WriteLine("Ошибка: Нет сообщений для обновления.");
+            }
         }
+
 
         // Вход в группу чата
         public async Task JoinChat(int chatId)
