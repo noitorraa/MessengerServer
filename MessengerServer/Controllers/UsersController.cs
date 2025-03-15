@@ -71,15 +71,19 @@ namespace MessengerServer.Controllers
                 Content = m.Content,
                 UserID = (int)m.SenderId,
                 CreatedAt = (DateTime)m.CreatedAt,
-                IsRead = m.SenderId == _userId || // Если отправитель — текущий пользователь
-                    _context.MessageStatuses.Any(ms => 
-                        ms.MessageId == m.MessageId && 
-                        ms.UserId == _userId && 
-                        ms.Status)
+                IsRead = m.SenderId == _userId
+                ? true
+                : _context.MessageStatuses.Any(ms =>
+                    ms.MessageId == m.MessageId &&
+                    ms.UserId == _userId &&
+                    ms.Status)
             })
             .ToListAsync();
-
-        return Ok(messages);
+            foreach (var msg in messages.Take(3)) //логи
+            {
+                Console.WriteLine($"MessageID: {msg.MessageId}, IsRead: {msg.IsRead}, SenderID: {msg.UserID}");
+            }
+            return Ok(messages);
         }
 
         [HttpDelete("chats/{chatId}")]

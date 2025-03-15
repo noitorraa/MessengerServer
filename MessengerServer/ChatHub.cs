@@ -31,13 +31,11 @@ namespace MessengerServer.Hubs
             _context.Messages.Add(newMessage);
             await _context.SaveChangesAsync();
 
-            // Получаем ID пользователей чата (кроме отправителя)
             var chatUserIds = await _context.ChatMembers
-                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
-                .Select(cm => cm.UserId)
-                .ToListAsync();
+            .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+            .Select(cm => cm.UserId)
+            .ToListAsync();
 
-            // Создаем статусы "не прочитано"
             if (chatUserIds.Any())
             {
                 var statuses = chatUserIds.Select(uid => new MessageStatus
@@ -50,6 +48,7 @@ namespace MessengerServer.Hubs
 
                 _context.MessageStatuses.AddRange(statuses);
                 await _context.SaveChangesAsync();
+                Console.WriteLine($"Созданы статусы для UserIds: {string.Join(", ", chatUserIds)}");
             }
 
             // Отправляем сообщение через SignalR
