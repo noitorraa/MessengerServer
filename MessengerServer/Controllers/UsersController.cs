@@ -61,28 +61,26 @@ namespace MessengerServer.Controllers
         }
 
         [HttpGet("chats/{chatId}/{_userId}/messages")]
-        public async Task<ActionResult<List<MessageDto>>> GetChatMessages(int chatId, int _userId)
+        [HttpGet]
+        public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             var messages = await _context.Messages
-            .Where(m => m.ChatId == chatId)
-            .Select(m => new MessageDto
-            {
-                MessageId = m.MessageId,
-                Content = m.Content,
-                UserID = (int)m.SenderId,
-                CreatedAt = (DateTime)m.CreatedAt,
-                IsRead = m.SenderId == _userId
-                ? true
-                : _context.MessageStatuses.Any(ms =>
-                    ms.MessageId == m.MessageId &&
-                    ms.UserId == _userId &&
-                    ms.Status)
-            })
-            .ToListAsync();
-            foreach (var msg in messages.Take(3)) //логи
-            {
-                Console.WriteLine($"MessageID: {msg.MessageId}, IsRead: {msg.IsRead}, SenderID: {msg.UserID}");
-            }
+                .Where(m => m.ChatId == chatId)
+                .Select(m => new MessageDto
+                {
+                    MessageId = m.MessageId,
+                    Content = m.Content,
+                    UserID = (int)m.SenderId,
+                    CreatedAt = (DateTime)m.CreatedAt,
+                    IsRead = m.SenderId == userId
+                        ? false // Собственные сообщения не считаются прочитанными
+                        : _context.MessageStatuses.Any(ms =>
+                            ms.MessageId == m.MessageId &&
+                            ms.UserId == userId &&
+                            ms.Status)
+                })
+                .ToListAsync();
+
             return Ok(messages);
         }
 

@@ -32,7 +32,7 @@ namespace MessengerServer.Hubs
             await _context.SaveChangesAsync();
 
             var chatUserIds = await _context.ChatMembers
-            .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+            .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
             .Select(cm => cm.UserId)
             .ToListAsync();
 
@@ -48,7 +48,6 @@ namespace MessengerServer.Hubs
 
                 _context.MessageStatuses.AddRange(statuses);
                 await _context.SaveChangesAsync();
-                Console.WriteLine($"Созданы статусы для UserIds: {string.Join(", ", chatUserIds)}");
             }
 
             // Отправляем сообщение через SignalR
@@ -60,15 +59,11 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
-            if (messageIds == null || !messageIds.Any()) return;
-
-            var statusesToUpdate = await _context.MessageStatuses
+            var statuses = await _context.MessageStatuses
                 .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
                 .ToListAsync();
 
-            if (!statusesToUpdate.Any()) return;
-
-            foreach (var status in statusesToUpdate)
+            foreach (var status in statuses)
             {
                 status.Status = true;
                 status.UpdatedAt = DateTime.UtcNow;
@@ -76,11 +71,10 @@ namespace MessengerServer.Hubs
 
             await _context.SaveChangesAsync();
 
-            // Получаем идентификатор чата для уведомления участников
-            var chatId = statusesToUpdate.FirstOrDefault()?.Message.ChatId;
-            if (chatId.HasValue)
+            if (statuses.Any())
             {
-                await Clients.Group($"chat_{chatId.Value}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
+                var chatId = statuses.First().Message.ChatId;
+                await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
             }
         }
 
