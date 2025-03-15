@@ -60,27 +60,30 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
-            Console.WriteLine("Запустился метод обновления статусов");
-            var statuses = await _context.MessageStatuses
+            if (messageIds == null || !messageIds.Any()) return;
+
+            var statusesToUpdate = await _context.MessageStatuses
                 .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
                 .ToListAsync();
 
-            foreach (var status in statuses)
+            if (!statusesToUpdate.Any()) return;
+
+            foreach (var status in statusesToUpdate)
             {
                 status.Status = true;
                 status.UpdatedAt = DateTime.UtcNow;
             }
-            Console.WriteLine("Статусы поменялись");
+
             await _context.SaveChangesAsync();
-            Console.WriteLine("Статусы сохранились в бд");
-            // Уведомляем клиентов
-            var chatId = statuses.FirstOrDefault()?.Message.ChatId;
+
+            // Получаем идентификатор чата для уведомления участников
+            var chatId = statusesToUpdate.FirstOrDefault()?.Message.ChatId;
             if (chatId.HasValue)
             {
-                await Clients.Group($"chat_{chatId.Value}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
+                await Clients.Group($"chat_{chatId.Value}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
             }
-            Console.WriteLine("Уведомления отправились группе");
         }
+
 
         // Вход в группу чата
         public async Task JoinChat(int chatId)
