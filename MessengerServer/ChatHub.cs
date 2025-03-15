@@ -10,11 +10,11 @@ namespace MessengerServer.Hubs
 {
     public class ChatHub : Hub
     {
-        private readonly MessengerDataBaseContext _context;
+        //private MessengerDataBaseContext _context;
 
         public ChatHub(MessengerDataBaseContext context)
         {
-            _context = context;
+            context = GetContext();
         }
 
         // Отправка сообщения в группу чата
@@ -28,10 +28,10 @@ namespace MessengerServer.Hubs
                 ChatId = chatId,
                 CreatedAt = DateTime.UtcNow
             };
-            _context.Messages.Add(newMessage);
-            await _context.SaveChangesAsync();
+            GetContext().Messages.Add(newMessage);
+            await GetContext().SaveChangesAsync();
 
-            var chatUserIds = await _context.ChatMembers
+            var chatUserIds = await GetContext().ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
                 .Select(cm => cm.UserId)
                 .ToListAsync();
@@ -46,8 +46,8 @@ namespace MessengerServer.Hubs
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
-                _context.MessageStatuses.AddRange(statuses);
-                await _context.SaveChangesAsync();
+                GetContext().MessageStatuses.AddRange(statuses);
+                await GetContext().SaveChangesAsync();
             }
 
             // Отправляем сообщение через SignalR
@@ -67,9 +67,10 @@ namespace MessengerServer.Hubs
             }
 
             // Получаем статусы для переданных messageIds
-            var statuses = await _context.MessageStatuses
-                .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
-                .ToListAsync();
+            var statuses = await GetContext().MessageStatuses
+            .Include(ms => ms.Message)
+            .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
+            .ToListAsync();
 
             // Проверка на null или пустой список
             if (statuses == null || !statuses.Any())
@@ -88,7 +89,7 @@ namespace MessengerServer.Hubs
             }
 
             // Сохраняем изменения в базе данных
-            await _context.SaveChangesAsync();
+            await GetContext().SaveChangesAsync();
 
             // Логирование успешного обновления
             Console.WriteLine($"Статус сообщений обновлен для пользователя {userId}");
@@ -105,7 +106,19 @@ namespace MessengerServer.Hubs
             }
         }
 
-
+        static MessengerDataBaseContext GetContext()
+        {
+            MessengerDataBaseContext context = new MessengerDataBaseContext();
+            if (context == null)
+            {
+                context = new MessengerDataBaseContext();
+                return context;
+            }
+            else
+            {
+                return context;
+            }
+        }
 
         // Вход в группу чата
         public async Task JoinChat(int chatId)
