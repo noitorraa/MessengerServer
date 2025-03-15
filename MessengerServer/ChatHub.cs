@@ -32,9 +32,9 @@ namespace MessengerServer.Hubs
             await _context.SaveChangesAsync();
 
             var chatUserIds = await _context.ChatMembers
-            .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
-            .Select(cm => cm.UserId)
-            .ToListAsync();
+                .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
+                .Select(cm => cm.UserId)
+                .ToListAsync();
 
             if (chatUserIds.Any())
             {
@@ -42,7 +42,7 @@ namespace MessengerServer.Hubs
                 {
                     MessageId = newMessage.MessageId,
                     UserId = uid,
-                    Status = false,
+                    Status = false, // Статус "не прочитано"
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
@@ -52,9 +52,9 @@ namespace MessengerServer.Hubs
 
             // Отправляем сообщение через SignalR
             await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage",
-            newMessage.Content,
-            newMessage.SenderId,
-            newMessage.MessageId); // Передаем MessageId
+                newMessage.Content,
+                newMessage.SenderId,
+                newMessage.MessageId); // Передаем MessageId
         }
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
@@ -65,7 +65,7 @@ namespace MessengerServer.Hubs
 
             foreach (var status in statuses)
             {
-                status.Status = true;
+                status.Status = true; // Обновляем статус на "прочитано"
                 status.UpdatedAt = DateTime.UtcNow;
             }
 
@@ -77,7 +77,6 @@ namespace MessengerServer.Hubs
                 await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
             }
         }
-
 
         // Вход в группу чата
         public async Task JoinChat(int chatId)
