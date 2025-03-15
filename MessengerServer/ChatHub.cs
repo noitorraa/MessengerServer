@@ -61,6 +61,7 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
+            Console.WriteLine("Запустился метод обновления статусов");
             var statuses = await _context.MessageStatuses
                 .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
                 .ToListAsync();
@@ -70,15 +71,16 @@ namespace MessengerServer.Hubs
                 status.Status = true;
                 status.UpdatedAt = DateTime.UtcNow;
             }
-
+            Console.WriteLine("Статусы поменялись");
             await _context.SaveChangesAsync();
-
+            Console.WriteLine("Статусы сохранились в бд");
             // Уведомляем клиентов
             var chatId = statuses.FirstOrDefault()?.Message.ChatId;
             if (chatId.HasValue)
             {
                 await Clients.Group($"chat_{chatId.Value}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
             }
+            Console.WriteLine("Уведомления отправились группе");
         }
 
         // Вход в группу чата
