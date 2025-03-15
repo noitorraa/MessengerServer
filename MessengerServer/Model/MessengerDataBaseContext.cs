@@ -144,8 +144,11 @@ public partial class MessengerDataBaseContext : DbContext
             entity.Property(e => e.StatusId).HasColumnName("status_id");
             entity.Property(e => e.MessageId).HasColumnName("message_id");
             entity.Property(e => e.Status)
-                .HasMaxLength(20)
-                .HasColumnName("status");
+                .HasColumnType("tinyint(1)") 
+                .HasConversion(
+                    v => v ? (byte)1 : (byte)0, 
+                    v => v == 1                 
+                );
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
