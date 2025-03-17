@@ -18,7 +18,7 @@ namespace MessengerServer.Hubs
         }
 
         // Отправка сообщения в группу чата
-        public async Task SendMessage(int userId, string message, int chatId)
+        public async Task SendMessage(int userId, string message, int chatId, int? fileid = null)
         {
             // Сохраняем сообщение
             var newMessage = new Message
@@ -26,7 +26,8 @@ namespace MessengerServer.Hubs
                 Content = message,
                 SenderId = userId,
                 ChatId = chatId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                FileId = fileid
             };
             DefaultDbContext.GetContext().Messages.Add(newMessage);
             await DefaultDbContext.GetContext().SaveChangesAsync();
@@ -54,7 +55,10 @@ namespace MessengerServer.Hubs
             await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage",
                 newMessage.Content,
                 newMessage.SenderId,
-                newMessage.MessageId); // Передаем MessageId
+                newMessage.MessageId,
+                newMessage.FileId,
+                newMessage.File?.FileType,
+                newMessage.File?.FileUrl); // Передаем MessageId
         }
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)

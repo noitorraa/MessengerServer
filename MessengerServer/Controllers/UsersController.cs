@@ -63,7 +63,6 @@ namespace MessengerServer.Controllers
         }
 
         [HttpGet("chats/{chatId}/{_userId}/messages")]
-        [HttpGet]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             var messages = await _context.Messages
@@ -75,14 +74,17 @@ namespace MessengerServer.Controllers
                     UserID = (int)m.SenderId,
                     CreatedAt = (DateTime)m.CreatedAt,
                     IsRead = m.SenderId == userId
-                        ? false // Собственные сообщения не считаются прочитанными
+                        ? false
                         : _context.MessageStatuses.Any(ms =>
                             ms.MessageId == m.MessageId &&
                             ms.UserId == userId &&
-                            ms.Status)
+                            ms.Status),
+                    // Добавляем файловые поля
+                    FileId = m.FileId,
+                    FileType = m.File.FileType,
+                    FileUrl = m.File.FileUrl
                 })
                 .ToListAsync();
-
             return Ok(messages);
         }
 
@@ -273,10 +275,11 @@ namespace MessengerServer.Controllers
             return PhysicalFile(filePath, file.FileType);
         }
 
+        // В UsersController.cs
         public class MessageDto
         {
             [JsonProperty("messageId")]
-            public int MessageId { get; set; } // Новое поле
+            public int MessageId { get; set; }
 
             [JsonProperty("content")]
             public string Content { get; set; }
@@ -289,6 +292,16 @@ namespace MessengerServer.Controllers
 
             [JsonProperty("isRead")]
             public bool IsRead { get; set; }
+
+            // Новые поля для файлов
+            [JsonProperty("fileId")]
+            public int? FileId { get; set; }
+
+            [JsonProperty("fileType")]
+            public string FileType { get; set; }
+
+            [JsonProperty("fileUrl")]
+            public string FileUrl { get; set; }
         }
 
         public class ChatDto
