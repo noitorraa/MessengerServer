@@ -2,34 +2,38 @@
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
-namespace MessengerServer.Model;
+namespace MessengerServer.Models;
 
-public partial class MessengerDataBaseContext : DbContext
+public partial class DefaultDbContext : DbContext
 {
-    public MessengerDataBaseContext()
+    public DefaultDbContext()
     {
     }
 
-    public static MessengerDataBaseContext model;
-    public static Model.MessengerDataBaseContext GetContext()
-    {
-        if (model == null)
-        {
-            model = new MessengerDataBaseContext();
-        }
-        return model;
-    }
-
-    public MessengerDataBaseContext(DbContextOptions<MessengerDataBaseContext> options)
+    public DefaultDbContext(DbContextOptions<DefaultDbContext> options)
         : base(options)
     {
+    }
+
+    public static DefaultDbContext GetContext()
+    {
+        DefaultDbContext context = new DefaultDbContext();
+        if (context == null)
+        {
+            context = new DefaultDbContext();
+            return context;
+        }
+        else
+        {
+            return context;
+        }
     }
 
     public virtual DbSet<Chat> Chats { get; set; }
 
     public virtual DbSet<ChatMember> ChatMembers { get; set; }
 
-    public virtual DbSet<MediaFile> MediaFiles { get; set; }
+    public virtual DbSet<File> Files { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
 
@@ -38,16 +42,14 @@ public partial class MessengerDataBaseContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-            => optionsBuilder.UseMySql(
-                "Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;",
-                ServerVersion.AutoDetect("Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;")
-            );
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+        => optionsBuilder.UseMySQL("Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Chat>(entity =>
         {
-            entity.HasKey(e => e.ChatId).HasName("PK__chats__FD040B179084064F");
+            entity.HasKey(e => e.ChatId).HasName("PRIMARY");
 
             entity.ToTable("chats");
 
@@ -56,16 +58,20 @@ public partial class MessengerDataBaseContext : DbContext
                 .HasMaxLength(100)
                 .HasColumnName("chat_name");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
         });
 
         modelBuilder.Entity<ChatMember>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("PK__chat_mem__169FE8671DDEAC77");
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
 
             entity.ToTable("chat_members");
+
+            entity.HasIndex(e => e.ChatId, "FK_chat_members_chats");
+
+            entity.HasIndex(e => e.UserId, "FK_chat_members_users");
 
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.ChatId).HasColumnName("chat_id");
@@ -74,7 +80,7 @@ public partial class MessengerDataBaseContext : DbContext
             entity.HasOne(d => d.Chat).WithMany(p => p.ChatMembers)
                 .HasForeignKey(d => d.ChatId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__chat_memb__chat___3F466844");
+                .HasConstraintName("FK_chat_members_chats");
 
             entity.HasOne(d => d.User).WithMany(p => p.ChatMembers)
                 .HasForeignKey(d => d.UserId)
@@ -82,16 +88,15 @@ public partial class MessengerDataBaseContext : DbContext
                 .HasConstraintName("FK_chat_members_users");
         });
 
-        modelBuilder.Entity<MediaFile>(entity =>
+        modelBuilder.Entity<File>(entity =>
         {
-            entity.HasKey(e => e.FileId).HasName("PK__media_fi__07D884C617781517");
+            entity.HasKey(e => e.FileId).HasName("PRIMARY");
 
-            entity.ToTable("media_files");
+            entity.ToTable("files");
 
             entity.Property(e => e.FileId).HasColumnName("file_id");
-            entity.Property(e => e.ChatId).HasColumnName("chat_id");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.FileType)
@@ -100,81 +105,86 @@ public partial class MessengerDataBaseContext : DbContext
             entity.Property(e => e.FileUrl)
                 .HasMaxLength(255)
                 .HasColumnName("file_url");
-            entity.Property(e => e.SenderId).HasColumnName("sender_id");
-
-            entity.HasOne(d => d.Chat).WithMany(p => p.MediaFiles)
-                .HasForeignKey(d => d.ChatId)
-                .HasConstraintName("FK__media_fil__chat___48CFD27E");
-
-            entity.HasOne(d => d.Sender).WithMany(p => p.MediaFiles)
-                .HasForeignKey(d => d.SenderId)
-                .HasConstraintName("FK__media_fil__sende__47DBAE45");
+            entity.Property(e => e.Size).HasColumnName("size");
         });
 
         modelBuilder.Entity<Message>(entity =>
         {
-            entity.HasKey(e => e.MessageId).HasName("PK__messages__0BBF6EE651B86877");
+            entity.HasKey(e => e.MessageId).HasName("PRIMARY");
 
             entity.ToTable("messages");
 
+            entity.HasIndex(e => e.ChatId, "FK_messages_chats");
+
+            entity.HasIndex(e => e.FileId, "FK_messages_files");
+
+            entity.HasIndex(e => e.SenderId, "FK_messages_users");
+
             entity.Property(e => e.MessageId).HasColumnName("message_id");
             entity.Property(e => e.ChatId).HasColumnName("chat_id");
-            entity.Property(e => e.Content).HasColumnName("content");
+            entity.Property(e => e.Content)
+                .HasColumnType("text")
+                .HasColumnName("content");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
+            entity.Property(e => e.FileId).HasColumnName("file_id");
             entity.Property(e => e.SenderId).HasColumnName("sender_id");
 
             entity.HasOne(d => d.Chat).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.ChatId)
-                .HasConstraintName("FK__messages__chat_i__4316F928");
+                .HasConstraintName("FK_messages_chats");
+
+            entity.HasOne(d => d.File).WithMany(p => p.Messages)
+                .HasForeignKey(d => d.FileId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_messages_files");
 
             entity.HasOne(d => d.Sender).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.SenderId)
-                .HasConstraintName("FK__messages__sender__440B1D61");
+                .HasConstraintName("FK_messages_users");
         });
 
         modelBuilder.Entity<MessageStatus>(entity =>
         {
-            entity.HasKey(e => e.StatusId).HasName("PK__message___3683B531C7FBA2CA");
+            entity.HasKey(e => e.StatusId).HasName("PRIMARY");
 
             entity.ToTable("message_statuses");
 
+            entity.HasIndex(e => e.MessageId, "FK_message_statuses_messages");
+
+            entity.HasIndex(e => e.UserId, "FK_message_statuses_users");
+
             entity.Property(e => e.StatusId).HasColumnName("status_id");
             entity.Property(e => e.MessageId).HasColumnName("message_id");
-            entity.Property(e => e.Status)
-                .HasColumnType("tinyint(1)") 
-                .HasConversion(
-                    v => v ? (byte)1 : (byte)0, 
-                    v => v == 1                 
-                );
+            entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("updated_at");
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
             entity.HasOne(d => d.Message).WithMany(p => p.MessageStatuses)
                 .HasForeignKey(d => d.MessageId)
-                .HasConstraintName("FK__message_s__messa__4CA06362");
+                .HasConstraintName("FK_message_statuses_messages");
 
             entity.HasOne(d => d.User).WithMany(p => p.MessageStatuses)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("FK__message_s__user___4D94879B");
+                .HasConstraintName("FK_message_statuses_users");
         });
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.HasKey(e => e.UserId).HasName("PK__users__B9BE370FCB826D3A");
+            entity.HasKey(e => e.UserId).HasName("PRIMARY");
 
             entity.ToTable("users");
 
-            entity.HasIndex(e => e.Username, "UQ__users__F3DBC57211916948").IsUnique();
+            entity.HasIndex(e => e.Username, "username").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.PasswordHash)

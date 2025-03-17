@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using MessengerServer.Model;
+using MessengerServer.Models;
 using Org.BouncyCastle.Crypto.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using MessengerServer.Hubs;
@@ -15,12 +15,14 @@ namespace MessengerServer.Controllers
     [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
-        private readonly MessengerDataBaseContext _context;
+        private readonly IWebHostEnvironment _env;
+        private readonly DefaultDbContext _context;
         private ChatHub _chatHub;
         private readonly IServiceProvider _serviceProvider;
 
-        public UsersController(MessengerDataBaseContext context, IServiceProvider serviceProvider)
+        public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env)
         {
+            _env = env;
             _context = context;
             _serviceProvider = serviceProvider;
         }
@@ -223,6 +225,52 @@ namespace MessengerServer.Controllers
                 );
 
             return chat != null ? Ok(chat) : NotFound();
+        }
+
+        [HttpPost("upload/{chatId}/{userId}")]
+        public async Task<IActionResult> UploadFile(int chatId, int userId, IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("Файл не выбран");
+
+            // Генерация уникального имени
+            var fileId = Guid.NewGuid().ToString("N");
+            var extension = Path.GetExtension(file.FileName);
+            var fileName = $"{fileId}{extension}";
+            var filePath = Path.Combine(_env.ContentRootPath, "uploads", $"chat_{chatId}", fileName);
+
+            // Создание папки, если не существует
+            var dir = Path.GetDirectoryName(filePath);
+            Directory.CreateDirectory(dir);
+
+            // Сохранение файла
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Сохранение в БД
+            var dbFile = new Models.File
+            {
+                FileUrl = $"/uploads/chat_{chatId}/{fileName}",
+                FileType = file.ContentType,
+                Size = file.Length
+            };
+
+            _context.Files.Add(dbFile);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { fileId = dbFile.FileId, url = dbFile.FileUrl });
+        }
+
+        [HttpGet("{fileId}")]
+        public async Task<IActionResult> GetFile(int fileId)
+        {
+            var file = await _context.Files.FindAsync(fileId);
+            if (file == null) return NotFound();
+
+            var filePath = Path.Combine(_env.ContentRootPath, file.FileUrl.TrimStart('/'));
+            return PhysicalFile(filePath, file.FileType);
         }
 
         public class MessageDto

@@ -1,10 +1,11 @@
 using MessengerServer.Hubs;
-using MessengerServer.Model;
+using MessengerServer.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json.Serialization;
+using MessengerServer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,11 +31,11 @@ builder.Services.AddCors(options =>
 });
 
 
-builder.Services.AddDbContext<MessengerDataBaseContext>(options =>
+builder.Services.AddDbContext<DefaultDbContext>(options =>
     options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"),
     ServerVersion.Parse("8.0")));
 
-List<User> users = MessengerDataBaseContext.GetContext().Users.ToList();
+List<User> users = DefaultDbContext.GetContext().Users.ToList();
 
 builder.Services.AddSignalR(hubOptions => {
     hubOptions.EnableDetailedErrors = true;

@@ -1,5 +1,5 @@
 ﻿using MessengerServer.Controllers;
-using MessengerServer.Model;
+using MessengerServer.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -12,9 +12,9 @@ namespace MessengerServer.Hubs
     {
         //private MessengerDataBaseContext _context;
 
-        public ChatHub(MessengerDataBaseContext context)
+        public ChatHub(DefaultDbContext context)
         {
-            context = GetContext();
+            context = DefaultDbContext.GetContext();
         }
 
         // Отправка сообщения в группу чата
@@ -28,10 +28,10 @@ namespace MessengerServer.Hubs
                 ChatId = chatId,
                 CreatedAt = DateTime.UtcNow
             };
-            GetContext().Messages.Add(newMessage);
-            await GetContext().SaveChangesAsync();
+            DefaultDbContext.GetContext().Messages.Add(newMessage);
+            await DefaultDbContext.GetContext().SaveChangesAsync();
 
-            var chatUserIds = await GetContext().ChatMembers
+            var chatUserIds = await DefaultDbContext.GetContext().ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
                 .Select(cm => cm.UserId)
                 .ToListAsync();
@@ -46,8 +46,8 @@ namespace MessengerServer.Hubs
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
-                GetContext().MessageStatuses.AddRange(statuses);
-                await GetContext().SaveChangesAsync();
+                DefaultDbContext.GetContext().MessageStatuses.AddRange(statuses);
+                await DefaultDbContext.GetContext().SaveChangesAsync();
             }
 
             // Отправляем сообщение через SignalR
@@ -55,6 +55,30 @@ namespace MessengerServer.Hubs
                 newMessage.Content,
                 newMessage.SenderId,
                 newMessage.MessageId); // Передаем MessageId
+        }
+
+        public async Task SendFileMessage(int userId, int fileId, int chatId)
+        {
+            var file = await DefaultDbContext.GetContext().Files.FindAsync(fileId);
+            if (file == null) throw new Exception("Файл не найден");
+
+            var message = new Message
+            {
+                SenderId = userId,
+                ChatId = chatId,
+                FileId = fileId, // Связь с файлом
+                CreatedAt = DateTime.UtcNow
+            };
+
+            DefaultDbContext.GetContext().Messages.Add(message);
+            await DefaultDbContext.GetContext().SaveChangesAsync();
+
+            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveFileMessage",
+                message.SenderId,
+                message.MessageId,
+                fileId,
+                file.FileType,
+                file.FileUrl);
         }
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
@@ -67,7 +91,7 @@ namespace MessengerServer.Hubs
             }
 
             // Получаем статусы для переданных messageIds
-            var statuses = await GetContext().MessageStatuses
+            var statuses = await DefaultDbContext.GetContext().MessageStatuses
             .Include(ms => ms.Message)
             .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
             .ToListAsync();
@@ -79,9 +103,6 @@ namespace MessengerServer.Hubs
                 return;
             }
 
-            // Логирование перед обновлением статуса
-            Console.WriteLine($"Обновляем статусы для {statuses.Count} сообщений для пользователя {userId}");
-
             foreach (var status in statuses)
             {
                 status.Status = true; // Обновляем статус на "прочитано"
@@ -89,7 +110,7 @@ namespace MessengerServer.Hubs
             }
 
             // Сохраняем изменения в базе данных
-            await GetContext().SaveChangesAsync();
+            await DefaultDbContext.GetContext().SaveChangesAsync();
 
             // Логирование успешного обновления
             Console.WriteLine($"Статус сообщений обновлен для пользователя {userId}");
@@ -103,20 +124,6 @@ namespace MessengerServer.Hubs
             else
             {
                 Console.WriteLine("Ошибка: Нет сообщений для обновления.");
-            }
-        }
-
-        static MessengerDataBaseContext GetContext()
-        {
-            MessengerDataBaseContext context = new MessengerDataBaseContext();
-            if (context == null)
-            {
-                context = new MessengerDataBaseContext();
-                return context;
-            }
-            else
-            {
-                return context;
             }
         }
 
