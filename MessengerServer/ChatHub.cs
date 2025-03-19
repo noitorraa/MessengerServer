@@ -63,26 +63,31 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            var file = await DefaultDbContext.GetContext().Files.FindAsync(fileId);
-            if (file == null) throw new Exception("Файл не найден");
+            var file = await DefaultDbContext.GetContext().Files
+                .FirstOrDefaultAsync(f => f.FileId == fileId); // Явная загрузка файла
+
+            if (file == null) return;
 
             var message = new Message
             {
                 SenderId = userId,
                 ChatId = chatId,
-                FileId = fileId, // Связь с файлом
+                FileId = fileId,
                 CreatedAt = DateTime.UtcNow
             };
 
             DefaultDbContext.GetContext().Messages.Add(message);
             await DefaultDbContext.GetContext().SaveChangesAsync();
 
-            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveFileMessage",
-                message.SenderId,
-                message.MessageId,
-                fileId,
-                file.FileType,
-                file.FileUrl);
+            // Добавлена передача контента для унификации
+            await Clients.Group($"chat_{chatId}")
+                .SendAsync("ReceiveMessage",
+                    "", // Пустой текст
+                    userId,
+                    message.MessageId,
+                    fileId,
+                    file.FileType,
+                    file.FileUrl);
         }
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
