@@ -33,34 +33,40 @@ namespace MessengerServer.Hubs
             await _context.SaveChangesAsync();
 
             var chatUserIds = await _context.ChatMembers
-                .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
-                .Select(cm => cm.UserId)
-                .ToListAsync();
+            .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
+            .Select(cm => cm.UserId)
+            .ToListAsync();
 
-            Console.WriteLine($"chatuserids = {chatUserIds.ToList()}");
-            
             if (chatUserIds.Any())
             {
                 var statuses = chatUserIds.Select(uid => new MessageStatus
                 {
                     MessageId = newMessage.MessageId,
                     UserId = uid,
-                    Status = false, // Статус "не прочитано"
+                    Status = false, // Помечаем как непрочитанное
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
                 _context.MessageStatuses.AddRange(statuses);
                 await _context.SaveChangesAsync();
-            }
 
-            // Отправляем сообщение через SignalR
-            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage",
-                newMessage.Content,
-                newMessage.SenderId,
-                newMessage.MessageId,
-                newMessage.FileId,
-                newMessage.File?.FileType,
-                newMessage.File?.FileUrl); // Передаем MessageId
+
+                _context.MessageStatuses.AddRange(statuses);
+                await _context.SaveChangesAsync();
+
+                // Отправляем сообщение через SignalR
+                await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage",
+                    newMessage.Content,
+                    newMessage.SenderId,
+                    newMessage.MessageId,
+                    newMessage.FileId,
+                    newMessage.File?.FileType,
+                    newMessage.File?.FileUrl); // Передаем MessageId
+            }
+            else
+            {
+                throw new Exception("нету id юзеров (пусто)");
+            }    
         }
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
@@ -130,7 +136,7 @@ namespace MessengerServer.Hubs
             if (statuses.Any())
             {
                 var chatId = statuses.First().Message.ChatId;
-                await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatusBatch", messageIds, userId);
+                await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
             }
             else
             {
