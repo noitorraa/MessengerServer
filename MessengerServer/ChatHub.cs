@@ -10,11 +10,12 @@ namespace MessengerServer.Hubs
 {
     public class ChatHub : Hub
     {
-        //private MessengerDataBaseContext _context;
+        private DefaultDbContext _context;
 
         public ChatHub(DefaultDbContext context)
         {
-            context = DefaultDbContext.GetContext();
+            _context = context;
+            //context = _context;
         }
 
         // Отправка сообщения в группу чата
@@ -29,10 +30,10 @@ namespace MessengerServer.Hubs
                 CreatedAt = DateTime.UtcNow,
                 FileId = fileid
             };
-            DefaultDbContext.GetContext().Messages.Add(newMessage);
-            await DefaultDbContext.GetContext().SaveChangesAsync();
+            _context.Messages.Add(newMessage);
+            await _context.SaveChangesAsync();
 
-            var chatUserIds = await DefaultDbContext.GetContext().ChatMembers
+            var chatUserIds = await _context.ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != userId) // Исключаем отправителя
                 .Select(cm => cm.UserId)
                 .ToListAsync();
@@ -47,8 +48,8 @@ namespace MessengerServer.Hubs
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
-                DefaultDbContext.GetContext().MessageStatuses.AddRange(statuses);
-                await DefaultDbContext.GetContext().SaveChangesAsync();
+                _context.MessageStatuses.AddRange(statuses);
+                await _context.SaveChangesAsync();
             }
 
             // Отправляем сообщение через SignalR
@@ -63,7 +64,7 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            var file = await DefaultDbContext.GetContext().Files
+            var file = await _context.Files
                 .FirstOrDefaultAsync(f => f.FileId == fileId); // Явная загрузка файла
 
             if (file == null) return;
@@ -76,8 +77,8 @@ namespace MessengerServer.Hubs
                 CreatedAt = DateTime.UtcNow
             };
 
-            DefaultDbContext.GetContext().Messages.Add(message);
-            await DefaultDbContext.GetContext().SaveChangesAsync();
+            _context.Messages.Add(message);
+            await _context.SaveChangesAsync();
 
             // Добавлена передача контента для унификации
             await Clients.Group($"chat_{chatId}")
@@ -100,7 +101,7 @@ namespace MessengerServer.Hubs
             }
 
             // Получаем статусы для переданных messageIds
-            var statuses = await DefaultDbContext.GetContext().MessageStatuses
+            var statuses = await _context.MessageStatuses
             .Include(ms => ms.Message)
             .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
             .ToListAsync();
@@ -119,7 +120,7 @@ namespace MessengerServer.Hubs
             }
 
             // Сохраняем изменения в базе данных
-            await DefaultDbContext.GetContext().SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
             // Логирование успешного обновления
             Console.WriteLine($"Статус сообщений обновлен для пользователя {userId}");
