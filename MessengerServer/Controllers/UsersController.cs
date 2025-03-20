@@ -84,8 +84,6 @@ namespace MessengerServer.Controllers
             return Ok(messages);
         }
 
-        }
-
         [HttpDelete("chats/{chatId}")]
         public async Task<IActionResult> DeleteChat(int chatId)
         {
