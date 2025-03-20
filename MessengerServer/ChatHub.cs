@@ -100,25 +100,9 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
-            // Проверка на null и пустой список
-            if (messageIds == null || !messageIds.Any())
-            {
-                Console.WriteLine("Ошибка: messageIds пустой или null.");
-                return;
-            }
-
-            // Получаем статусы для переданных messageIds
             var statuses = await _context.MessageStatuses
-            .Include(ms => ms.Message)
-            .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
-            .ToListAsync();
-
-            // Проверка на null или пустой список
-            if (statuses == null || !statuses.Any())
-            {
-                Console.WriteLine("Ошибка: Не найдены статусы сообщений для обновления.");
-                return;
-            }
+                .Where(ms => messageIds.Contains((int)ms.MessageId) && ms.UserId == userId && !ms.Status)
+                .ToListAsync();
 
             foreach (var status in statuses)
             {
@@ -126,23 +110,13 @@ namespace MessengerServer.Hubs
                 status.UpdatedAt = DateTime.UtcNow;
             }
 
-            // Сохраняем изменения в базе данных
             await _context.SaveChangesAsync();
 
-            // Логирование успешного обновления
-            Console.WriteLine($"Статус сообщений обновлен для пользователя {userId}");
-
-            // Отправляем обновления через SignalR
-            if (statuses.Any())
-            {
-                var chatId = statuses.First().Message.ChatId;
-                await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
-            }
-            else
-            {
-                Console.WriteLine("Ошибка: Нет сообщений для обновления.");
-            }
+            // Отправляем обновление клиентам через SignalR
+            var chatId = statuses.First().Message.ChatId;
+            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
         }
+
 
         // Вход в группу чата
         public async Task JoinChat(int chatId)

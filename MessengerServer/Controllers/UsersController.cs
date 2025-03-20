@@ -62,7 +62,7 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/{_userId}/messages")]
+        [HttpGet("chats/{chatId}/{userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             var messages = await _context.Messages
@@ -73,8 +73,10 @@ namespace MessengerServer.Controllers
                     Content = m.Content,
                     UserID = (int)m.SenderId,
                     CreatedAt = (DateTime)m.CreatedAt,
-                    IsRead = _context.MessageStatuses
-                        .Any(ms => ms.MessageId == m.MessageId && ms.UserId == userId && ms.Status),
+                    IsRead = _context.MessageStatuses.Any(ms =>
+                        ms.MessageId == m.MessageId &&
+                        ms.UserId == userId &&
+                        ms.Status), // Четкое определение статуса из базы
                     FileId = m.FileId,
                     FileType = m.File != null ? m.File.FileType : null,
                     FileUrl = m.File != null ? m.File.FileUrl : null
@@ -83,6 +85,7 @@ namespace MessengerServer.Controllers
 
             return Ok(messages);
         }
+
 
         [HttpDelete("chats/{chatId}")]
         public async Task<IActionResult> DeleteChat(int chatId)
