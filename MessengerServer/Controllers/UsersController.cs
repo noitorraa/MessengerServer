@@ -79,10 +79,10 @@ namespace MessengerServer.Controllers
                             ms.MessageId == m.MessageId &&
                             ms.UserId == userId &&
                             ms.Status),
-                    // Добавляем файловые поля
+                    // Исправленные файловые поля
                     FileId = m.FileId,
-                    FileType = m.File.FileType,
-                    FileUrl = m.File.FileUrl
+                    FileType = m.File != null ? m.File.FileType : null,
+                    FileUrl = m.File != null ? m.File.FileUrl : null
                 })
                 .ToListAsync();
             return Ok(messages);
