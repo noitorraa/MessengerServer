@@ -15,7 +15,6 @@ namespace MessengerServer.Hubs
         public ChatHub(DefaultDbContext context)
         {
             _context = context;
-            //context = _context;
         }
 
         // Отправка сообщения в группу чата
@@ -38,6 +37,8 @@ namespace MessengerServer.Hubs
                 .Select(cm => cm.UserId)
                 .ToListAsync();
 
+            Console.WriteLine($"chatuserids = {chatUserIds.ToList()}");
+            
             if (chatUserIds.Any())
             {
                 var statuses = chatUserIds.Select(uid => new MessageStatus
