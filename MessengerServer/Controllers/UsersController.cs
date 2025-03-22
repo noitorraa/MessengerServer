@@ -73,16 +73,17 @@ namespace MessengerServer.Controllers
                     Content = m.Content,
                     UserID = (int)m.SenderId,
                     CreatedAt = (DateTime)m.CreatedAt,
-                    IsRead = _context.MessageStatuses.Any(ms =>
-                        ms.MessageId == m.MessageId &&
-                        ms.UserId == userId &&
-                        ms.Status), // Четкое определение статуса из базы
+                    // Проверяем статус только для сообщений, где текущий пользователь - получатель
+                    IsRead = m.SenderId != userId &&
+                             _context.MessageStatuses.Any(ms =>
+                                 ms.MessageId == m.MessageId &&
+                                 ms.UserId == userId &&
+                                 ms.Status),
                     FileId = m.FileId,
-                    FileType = m.File != null ? m.File.FileType : null,
-                    FileUrl = m.File != null ? m.File.FileUrl : null
+                    FileType = m.File.FileType,
+                    FileUrl = m.File.FileUrl
                 })
                 .ToListAsync();
-
             return Ok(messages);
         }
 

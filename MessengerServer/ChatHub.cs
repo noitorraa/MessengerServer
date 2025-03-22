@@ -97,27 +97,27 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
-            var statuses = await _context.MessageStatuses
-                .Where(ms => messageIds.Contains((int)ms.MessageId)
-                    && ms.UserId == userId
-                    && !ms.Status)
+            var validMessages = await _context.Messages
+                .Where(m => messageIds.Contains(m.MessageId) &&
+                            m.SenderId != userId) // Только чужие сообщения
                 .ToListAsync();
 
-            foreach (var status in statuses)
+            foreach (var message in validMessages)
             {
-                status.Status = true;
-                status.UpdatedAt = DateTime.UtcNow;
+                var status = await _context.MessageStatuses
+                    .FirstOrDefaultAsync(ms => ms.MessageId == message.MessageId
+                                            && ms.UserId == userId);
+
+                if (status != null && !status.Status)
+                {
+                    status.Status = true;
+                    status.UpdatedAt = DateTime.UtcNow;
+                }
             }
 
             await _context.SaveChangesAsync();
-            var chatId = statuses.FirstOrDefault()?.Message.ChatId;
-            if (chatId.HasValue)
-            {
-                await Clients.Group($"chat_{chatId}")
-                    .SendAsync("ReceiveMessageStatusUpdate",
-                        messageIds,
-                        userId);
-            }
+            await Clients.Group($"chat_{validMessages.First().ChatId}")
+                .SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
         }
 
 
