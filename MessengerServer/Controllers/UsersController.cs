@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNet.SignalR;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace MessengerServer.Controllers
 {
@@ -62,36 +63,23 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/{_userId}/messages")]
+        [HttpGet("chats/{chatId}/{userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
-            var query = $@"
-                SELECT 
-                    m.message_id AS MessageId,
-                    m.content AS Content,
-                    m.sender_id AS UserID,
-                    m.created_at AS CreatedAt,
-                    CASE 
-                        WHEN m.sender_id = {userId} THEN 
-                            (SELECT COUNT(*) FROM message_statuses ms 
-                             WHERE ms.message_id = m.message_id 
-                             AND ms.user_id != {userId} 
-                             AND ms.status = 1) > 0
-                        ELSE 
-                            (SELECT COUNT(*) FROM message_statuses ms 
-                             WHERE ms.message_id = m.message_id 
-                             AND ms.user_id = {userId} 
-                             AND ms.status = 1) > 0
-                    END AS IsRead,
-                    m.file_id AS FileId,
-                    COALESCE(f.file_type, '') AS FileType,
-                    COALESCE(f.file_url, '') AS FileUrl
-                FROM messages m
-                LEFT JOIN files f ON m.file_id = f.file_id
-                WHERE m.chat_id = {chatId}
-            ";
-
-            var messages = await _context.Database.SqlQueryRaw<MessageDto>(query).ToListAsync();
+            var messages = await _context.Messages
+                .Where(m => m.ChatId == chatId)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new MessageDto
+                {
+                    MessageId = m.MessageId,
+                    Content = m.Content,
+                    UserID = (int)m.SenderId,
+                    CreatedAt = (DateTime)m.CreatedAt,
+                    FileId = m.FileId,
+                    FileType = m.File != null ? m.File.FileType : null,
+                    FileUrl = m.File != null ? m.File.FileUrl : null
+                })
+                .ToListAsync();
 
             return Ok(messages);
         }
@@ -299,9 +287,6 @@ namespace MessengerServer.Controllers
             [JsonProperty("createdAt")]
             public DateTime CreatedAt { get; set; }
 
-            [JsonProperty("isRead")]
-            public bool IsRead { get; set; }
-
             // Новые поля для файлов
             [JsonProperty("fileId")]
             public int? FileId { get; set; }
@@ -311,6 +296,8 @@ namespace MessengerServer.Controllers
 
             [JsonProperty("fileUrl")]
             public string? FileUrl { get; set; }
+            [JsonProperty("status")]
+            public int Status { get; set; }
         }
 
         public class ChatDto
@@ -330,6 +317,13 @@ namespace MessengerServer.Controllers
         {
             public string ChatName { get; set; }
             public List<int> UserIds { get; set; }
+        }
+
+        public enum MessageStatusType
+        {
+            Sent = 0,       // Отправлено
+            Delivered = 1,  // Доставлено
+            Read = 2        // Прочитано
         }
     }
 }

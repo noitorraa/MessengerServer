@@ -11,8 +11,7 @@ public partial class MessageStatus
     public int? MessageId { get; set; }
 
     public int? UserId { get; set; }
-    [Column(TypeName = "tinyint(1)")]
-    public bool Status { get; set; }
+    public int Status { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
