@@ -66,7 +66,7 @@ namespace MessengerServer.Controllers
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             var query = $@"
-                                SELECT 
+                SELECT 
                     m.message_id AS MessageId,
                     m.content AS Content,
                     m.sender_id AS UserID,
@@ -84,11 +84,12 @@ namespace MessengerServer.Controllers
                              AND ms.status = 1) > 0
                     END AS IsRead,
                     m.file_id AS FileId,
-                    f.file_type AS FileType,
-                    f.file_url AS FileUrl
+                    COALESCE(f.file_type, '') AS FileType,
+                    COALESCE(f.file_url, '') AS FileUrl
                 FROM messages m
                 LEFT JOIN files f ON m.file_id = f.file_id
-                WHERE m.chat_id = {chatId};";
+                WHERE m.chat_id = {chatId}
+            ";
 
             var messages = await _context.Database.SqlQueryRaw<MessageDto>(query).ToListAsync();
 
@@ -306,10 +307,10 @@ namespace MessengerServer.Controllers
             public int? FileId { get; set; }
 
             [JsonProperty("fileType")]
-            public string FileType { get; set; }
+            public string? FileType { get; set; }
 
             [JsonProperty("fileUrl")]
-            public string FileUrl { get; set; }
+            public string? FileUrl { get; set; }
         }
 
         public class ChatDto
