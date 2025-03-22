@@ -128,6 +128,8 @@ namespace MessengerServer.Hubs
                 return;
             }
 
+            Console.WriteLine($"Отправка ReceiveMessageStatusUpdate: chat_{firstMessage.ChatId}, messageIds=[{string.Join(", ", messageIds)}]");
+
             await Clients.Group($"chat_{firstMessage.ChatId}")
                 .SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
         }

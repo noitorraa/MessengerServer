@@ -76,7 +76,7 @@ namespace MessengerServer.Controllers
                     IsRead = m.SenderId == userId
                         ? _context.MessageStatuses.Any(ms =>
                             ms.MessageId == m.MessageId &&
-                            ms.UserId != userId &&
+                            ms.UserId != userId && // Проверяем статус от других участников чата
                             ms.Status)
                         : _context.MessageStatuses.Any(ms =>
                             ms.MessageId == m.MessageId &&
