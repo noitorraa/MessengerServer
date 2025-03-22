@@ -65,25 +65,30 @@ namespace MessengerServer.Controllers
         [HttpGet("chats/{chatId}/{_userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
-            var query = $@"SELECT 
-                m.message_id,
-                m.content,
-                m.sender_id AS UserID,
-                m.created_at,
-                CASE 
-                    WHEN m.sender_id = {userId} THEN 
-                        (SELECT COUNT(*) FROM message_statuses ms 
-                         WHERE ms.message_id = m.message_id 
-                         AND ms.user_id != {userId} 
-                         AND ms.status = 1) > 0
-                    ELSE 
-                        (SELECT COUNT(*) FROM message_statuses ms 
-                         WHERE ms.message_id = m.message_id 
-                         AND ms.user_id = {userId} 
-                         AND ms.status = 1) > 0
-                END AS IsRead
-            FROM messages m
-            WHERE m.chat_id = {chatId}";
+            var query = $@"
+                                SELECT 
+                    m.message_id AS MessageId,
+                    m.content AS Content,
+                    m.sender_id AS UserID,
+                    m.created_at AS CreatedAt,
+                    CASE 
+                        WHEN m.sender_id = {userId} THEN 
+                            (SELECT COUNT(*) FROM message_statuses ms 
+                             WHERE ms.message_id = m.message_id 
+                             AND ms.user_id != {userId} 
+                             AND ms.status = 1) > 0
+                        ELSE 
+                            (SELECT COUNT(*) FROM message_statuses ms 
+                             WHERE ms.message_id = m.message_id 
+                             AND ms.user_id = {userId} 
+                             AND ms.status = 1) > 0
+                    END AS IsRead,
+                    m.file_id AS FileId,
+                    f.file_type AS FileType,
+                    f.file_url AS FileUrl
+                FROM messages m
+                LEFT JOIN files f ON m.file_id = f.file_id
+                WHERE m.chat_id = {chatId};";
 
             var messages = await _context.Database.SqlQueryRaw<MessageDto>(query).ToListAsync();
 
