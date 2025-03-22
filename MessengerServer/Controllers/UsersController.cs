@@ -66,22 +66,39 @@ namespace MessengerServer.Controllers
         [HttpGet("chats/{chatId}/{userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
+            // Получаем ID второго участника чата
+            var otherUserId = await _context.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+                .Select(cm => cm.UserId)
+                .FirstOrDefaultAsync();
+
             var messages = await _context.Messages
                 .Where(m => m.ChatId == chatId)
                 .OrderBy(m => m.CreatedAt)
-                .Select(m => new MessageDto
+                .Select(m => new
                 {
-                    MessageId = m.MessageId,
-                    Content = m.Content,
-                    UserID = (int)m.SenderId,
-                    CreatedAt = (DateTime)m.CreatedAt,
-                    FileId = m.FileId,
-                    FileType = m.File != null ? m.File.FileType : null,
-                    FileUrl = m.File != null ? m.File.FileUrl : null,
-                    Status = m.MessageStatuses
-                    .SingleOrDefault(ms => ms.UserId == userId) != null
-                        ? m.MessageStatuses.First(ms => ms.UserId == userId).Status
-                        : 0 // По умолчанию: Sent
+                    Message = m,
+                    StatusForCurrentUser = m.MessageStatuses
+                        .Where(ms => ms.UserId == userId)
+                        .Select(ms => ms.Status)
+                        .FirstOrDefault(),
+                    StatusForRecipient = m.MessageStatuses
+                        .Where(ms => ms.UserId == otherUserId)
+                        .Select(ms => ms.Status)
+                        .FirstOrDefault()
+                })
+                .Select(x => new MessageDto
+                {
+                    MessageId = x.Message.MessageId,
+                    Content = x.Message.Content,
+                    UserID = (int)x.Message.SenderId,
+                    CreatedAt = (DateTime)x.Message.CreatedAt,
+                    FileId = x.Message.FileId,
+                    FileType = x.Message.File != null ? x.Message.File.FileType : null,
+                    FileUrl = x.Message.File != null ? x.Message.File.FileUrl : null,
+                    Status = x.Message.SenderId == userId
+                        ? x.StatusForRecipient // Для своих сообщений берем статус получателя
+                        : x.StatusForCurrentUser // Для чужих сообщений берем свой статус
                 })
                 .ToListAsync();
 
