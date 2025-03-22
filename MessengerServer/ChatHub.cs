@@ -31,6 +31,11 @@ namespace MessengerServer.Hubs
             _context.Messages.Add(newMessage);
             await _context.SaveChangesAsync();
 
+            var recipients = await _context.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+                .Select(cm => cm.UserId)
+                .ToListAsync();
+
             // Формируем DTO с корректным IsRead
             var messageDto = new MessageDto
             {
@@ -42,7 +47,10 @@ namespace MessengerServer.Hubs
                 FileType = newMessage.File?.FileType,
                 FileUrl = newMessage.File?.FileUrl
             };
-            await UpdateMessageStatus(newMessage.MessageId, userId, (int)MessageStatusType.Sent);
+            foreach (var recipientId in recipients)
+            {
+                await UpdateMessageStatus(newMessage.MessageId, recipientId, (int)MessageStatusType.Delivered);
+            }
             await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", messageDto);
         }
 
@@ -51,17 +59,20 @@ namespace MessengerServer.Hubs
             await UpdateMessageStatus(messageId, userId, (int)MessageStatusType.Delivered);
         }
 
-        private async Task UpdateMessageStatus(int messageId, int userId, int status)
+        private async Task UpdateMessageStatus(int messageId, int recipientId, int status)
         {
             var statusEntry = await _context.MessageStatuses
-                .FirstOrDefaultAsync(ms => ms.MessageId == messageId && ms.UserId == userId);
+                .FirstOrDefaultAsync(ms =>
+                    ms.MessageId == messageId &&
+                    ms.UserId == recipientId // Важно: получатель!
+                );
 
             if (statusEntry == null)
             {
                 statusEntry = new MessageStatus
                 {
                     MessageId = messageId,
-                    UserId = userId,
+                    UserId = recipientId, // ID пользователя, для которого обновляется статус
                     Status = status,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -73,37 +84,7 @@ namespace MessengerServer.Hubs
                 statusEntry.UpdatedAt = DateTime.UtcNow;
             }
 
-            var message = await _context.Messages.FindAsync(messageId);
-            if (message == null) return;
-
-            if (message.ChatId == null)
-            {
-                Console.WriteLine("Ошибка: сообщение не связано с чатом");
-                return;
-            }
-
-            int chatId = (int)message.ChatId;
-
             await _context.SaveChangesAsync();
-            await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatus", messageId, status);
-        }
-
-        public async Task MarkMessagesAsRead(int chatId, int userId)
-        {
-            // Найти все непрочитанные сообщения в чате для этого пользователя
-            var unreadMessages = await _context.Messages
-                .Where(m => m.ChatId == chatId &&
-                           m.SenderId != userId &&
-                           !m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status == (int)MessageStatusType.Read))
-                .ToListAsync();
-
-            foreach (var message in unreadMessages)
-            {
-                await UpdateMessageStatus(message.MessageId, userId, (int)MessageStatusType.Read);
-            }
-
-            // Отправить обновление всем участникам чата
-            await Clients.Group($"chat_{chatId}").SendAsync("RefreshMessages");
         }
 
         public async Task SendFileMessage(int userId, int fileId, int chatId) // нужно поменять, DTO отправлять
