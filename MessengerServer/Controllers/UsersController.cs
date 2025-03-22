@@ -65,34 +65,27 @@ namespace MessengerServer.Controllers
         [HttpGet("chats/{chatId}/{_userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
-            var messages = await _context.Messages
-                .Where(m => m.ChatId == chatId)
-                .Select(m => new MessageDto
-                {
-                    MessageId = m.MessageId,
-                    Content = m.Content,
-                    UserID = (int)m.SenderId,
-                    CreatedAt = (DateTime)m.CreatedAt,
-                    IsRead = m.SenderId == userId
-                        ? _context.MessageStatuses.Any(ms =>
-                            ms.MessageId == m.MessageId &&
-                            ms.UserId != userId && // Проверяем статус от других участников чата
-                            ms.Status)
-                        : _context.MessageStatuses.Any(ms =>
-                            ms.MessageId == m.MessageId &&
-                            ms.UserId == userId &&
-                            ms.Status),
-                    FileId = m.FileId,
-                    FileType = m.File != null ? m.File.FileType : null,
-                    FileUrl = m.File != null ? m.File.FileUrl : null
-                })
-                .ToListAsync();
+            var query = $@"SELECT 
+                m.message_id,
+                m.content,
+                m.sender_id AS UserID,
+                m.created_at,
+                CASE 
+                    WHEN m.sender_id = {userId} THEN 
+                        (SELECT COUNT(*) FROM message_statuses ms 
+                         WHERE ms.message_id = m.message_id 
+                         AND ms.user_id != {userId} 
+                         AND ms.status = 1) > 0
+                    ELSE 
+                        (SELECT COUNT(*) FROM message_statuses ms 
+                         WHERE ms.message_id = m.message_id 
+                         AND ms.user_id = {userId} 
+                         AND ms.status = 1) > 0
+                END AS IsRead
+            FROM messages m
+            WHERE m.chat_id = {chatId}";
 
-            Console.WriteLine("Сервер возвращает сообщения:");
-            foreach (var msg in messages)
-            {
-                Console.WriteLine($"ID: {msg.MessageId}, IsRead: {msg.IsRead}");
-            }
+            var messages = await _context.Database.SqlQueryRaw<MessageDto>(query).ToListAsync();
 
             return Ok(messages);
         }
