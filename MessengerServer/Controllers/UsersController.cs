@@ -79,7 +79,7 @@ namespace MessengerServer.Controllers
                     FileType = m.File != null ? m.File.FileType : null,
                     FileUrl = m.File != null ? m.File.FileUrl : null,
                     Status = m.MessageStatuses
-                    .FirstOrDefault(ms => ms.UserId == userId) != null
+                    .SingleOrDefault(ms => ms.UserId == userId) != null
                         ? m.MessageStatuses.First(ms => ms.UserId == userId).Status
                         : 0 // По умолчанию: Sent
                 })

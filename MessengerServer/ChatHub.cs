@@ -63,8 +63,11 @@ namespace MessengerServer.Hubs
                            !m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status == (int)MessageStatusType.Read))
                 .ToListAsync();
 
+            Console.WriteLine("Непрочитанных сообщений = "+ unreadMessages.Count);
+
             foreach (var message in unreadMessages)
             {
+                Console.WriteLine($"Статус сообщения {message.MessageId} поменяли на Read");
                 await UpdateMessageStatus(message.MessageId, userId, (int)MessageStatusType.Read);
             }
 
@@ -74,6 +77,7 @@ namespace MessengerServer.Hubs
 
         public async Task MessageDelivered(int messageId, int userId)
         {
+            Console.WriteLine($"для {messageId} статус изменен на Delivered");
             await UpdateMessageStatus(messageId, userId, (int)MessageStatusType.Delivered);
         }
 
