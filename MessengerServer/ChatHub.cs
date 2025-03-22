@@ -88,6 +88,24 @@ namespace MessengerServer.Hubs
             await Clients.Group($"chat_{chatId}").SendAsync("UpdateMessageStatus", messageId, status);
         }
 
+        public async Task MarkMessagesAsRead(int chatId, int userId)
+        {
+            // Найти все непрочитанные сообщения в чате для этого пользователя
+            var unreadMessages = await _context.Messages
+                .Where(m => m.ChatId == chatId &&
+                           m.SenderId != userId &&
+                           !m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status == (int)MessageStatusType.Read))
+                .ToListAsync();
+
+            foreach (var message in unreadMessages)
+            {
+                await UpdateMessageStatus(message.MessageId, userId, (int)MessageStatusType.Read);
+            }
+
+            // Отправить обновление всем участникам чата
+            await Clients.Group($"chat_{chatId}").SendAsync("RefreshMessages");
+        }
+
         public async Task SendFileMessage(int userId, int fileId, int chatId) // нужно поменять, DTO отправлять
         {
             var file = await _context.Files
