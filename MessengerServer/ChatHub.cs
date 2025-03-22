@@ -47,9 +47,6 @@ namespace MessengerServer.Hubs
                     UpdatedAt = DateTime.UtcNow
                 }).ToList();
 
-                _context.MessageStatuses.AddRange(statuses);
-                await _context.SaveChangesAsync();
-
 
                 _context.MessageStatuses.AddRange(statuses);
                 await _context.SaveChangesAsync();
