@@ -62,7 +62,7 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/{userId}/messages")]
+        [HttpGet("chats/{chatId}/{_userId}/messages")]
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             var messages = await _context.Messages
@@ -80,8 +80,8 @@ namespace MessengerServer.Controllers
                                  ms.UserId == userId &&
                                  ms.Status),
                     FileId = m.FileId,
-                    FileType = m.File.FileType,
-                    FileUrl = m.File.FileUrl
+                    FileType = m.File != null ? m.File.FileType : null,
+                    FileUrl = m.File != null ? m.File.FileUrl : null
                 })
                 .ToListAsync();
             return Ok(messages);
