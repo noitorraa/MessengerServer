@@ -56,22 +56,20 @@ namespace MessengerServer.Hubs
 
         public async Task MarkMessagesAsRead(int chatId, int userId)
         {
-            // Найти все непрочитанные сообщения в чате для этого пользователя
+            // Исправленное условие выборки непрочитанных сообщений
             var unreadMessages = await _context.Messages
+                .Include(m => m.MessageStatuses) // Убедиться, что статусы загружены
                 .Where(m => m.ChatId == chatId &&
-                           m.SenderId != userId &&
-                           !m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status == (int)MessageStatusType.Read))
+                           m.SenderId != userId && // Только чужие сообщения
+                           (!m.MessageStatuses.Any(ms => ms.UserId == userId) || // Нет статуса
+                            m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status < (int)MessageStatusType.Read))) // Статус < Read
                 .ToListAsync();
-
-            Console.WriteLine("Непрочитанных сообщений = "+ unreadMessages.Count);
 
             foreach (var message in unreadMessages)
             {
-                Console.WriteLine($"Статус сообщения {message.MessageId} поменяли на Read");
                 await UpdateMessageStatus(message.MessageId, userId, (int)MessageStatusType.Read);
             }
 
-            // Отправить обновление всем участникам чата
             await Clients.Group($"chat_{chatId}").SendAsync("RefreshMessages");
         }
 
