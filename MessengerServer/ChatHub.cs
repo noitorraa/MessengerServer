@@ -109,10 +109,14 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId) // нужно поменять, DTO отправлять
         {
+            Console.WriteLine("Метод отправки файлов начал работу");
+
             var file = await _context.Files
                 .FirstOrDefaultAsync(f => f.FileId == fileId); // Явная загрузка файла
 
             if (file == null) return;
+
+            Console.WriteLine("Файл не null!");
 
             var message = new Message
             {
@@ -125,6 +129,8 @@ namespace MessengerServer.Hubs
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
 
+            Console.WriteLine("Файл сохранен в бд!");
+
             // Добавлена передача контента для унификации
             await Clients.Group($"chat_{chatId}")
                 .SendAsync("ReceiveMessage",
@@ -134,6 +140,8 @@ namespace MessengerServer.Hubs
                     fileId,
                     file.FileType,
                     file.FileUrl);
+
+            Console.WriteLine("Уведы отправлены участникам чата!");
         }
 
         // Вход в группу чата
