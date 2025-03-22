@@ -73,11 +73,15 @@ namespace MessengerServer.Controllers
                     Content = m.Content,
                     UserID = (int)m.SenderId,
                     CreatedAt = (DateTime)m.CreatedAt,
-                    IsRead = m.SenderId == userId ||  // Сообщения текущего пользователя считаем прочитанными
-                        _context.MessageStatuses.Any(ms =>
-                         ms.MessageId == m.MessageId &&
-                         ms.UserId == userId &&
-                         ms.Status),
+                    IsRead = m.SenderId == userId
+                        ? _context.MessageStatuses.Any(ms =>
+                            ms.MessageId == m.MessageId &&
+                            ms.UserId != userId && // Проверяем статус от других участников чата
+                            ms.Status)
+                        : _context.MessageStatuses.Any(ms =>
+                            ms.MessageId == m.MessageId &&
+                            ms.UserId == userId &&
+                            ms.Status),
                     FileId = m.FileId,
                     FileType = m.File != null ? m.File.FileType : null,
                     FileUrl = m.File != null ? m.File.FileUrl : null
