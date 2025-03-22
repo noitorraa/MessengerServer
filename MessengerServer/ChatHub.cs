@@ -97,44 +97,27 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
-            // Проверка на null и пустой список
-            if (messageIds == null || !messageIds.Any())
-            {
-                Console.WriteLine("Ошибка: messageIds пустой или null.");
-                return;
-            }
-
-            // Включаем связанную сущность Message и фильтруем статусы
             var statuses = await _context.MessageStatuses
-                .Include(ms => ms.Message) // Загружаем связанное сообщение
-                .Where(ms =>
-                    messageIds.Contains((int)ms.MessageId) &&
-                    ms.UserId == userId &&
-                    !ms.Status
-                )
+                .Where(ms => messageIds.Contains((int)ms.MessageId)
+                    && ms.UserId == userId
+                    && !ms.Status)
                 .ToListAsync();
 
-            if (!statuses.Any())
-            {
-                Console.WriteLine("Нет статусов для обновления.");
-                return;
-            }
-
-            // Обновляем статусы
             foreach (var status in statuses)
             {
                 status.Status = true;
                 status.UpdatedAt = DateTime.UtcNow;
             }
 
-            // Сохраняем изменения
             await _context.SaveChangesAsync();
-
-            // Получаем chatId из первого сообщения (предполагаем, что все messageIds из одного чата)
-            var chatId = statuses.First().Message.ChatId;
-
-            // Отправляем обновление в группу чата
-            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
+            var chatId = statuses.FirstOrDefault()?.Message.ChatId;
+            if (chatId.HasValue)
+            {
+                await Clients.Group($"chat_{chatId}")
+                    .SendAsync("ReceiveMessageStatusUpdate",
+                        messageIds,
+                        userId);
+            }
         }
 
 
