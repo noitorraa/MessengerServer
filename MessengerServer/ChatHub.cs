@@ -94,11 +94,23 @@ namespace MessengerServer.Hubs
 
         public async Task UpdateMessageStatusBatch(List<int> messageIds, int userId)
         {
+            if (messageIds == null || !messageIds.Any())
+            {
+                return; // Игнорируем пустые запросы
+            }
+
             var statuses = await _context.MessageStatuses
-                .Where(ms => messageIds.Contains((int)ms.MessageId)
-                    && ms.UserId == userId
-                    && !ms.Status)
+                .Include(ms => ms.Message) // Убедитесь, что связь настроена
+                .Where(ms =>
+                    messageIds.Contains((int)ms.MessageId) &&
+                    ms.UserId == userId &&
+                    !ms.Status)
                 .ToListAsync();
+
+            if (!statuses.Any())
+            {
+                return; // Нечего обновлять
+            }
 
             foreach (var status in statuses)
             {
@@ -108,13 +120,16 @@ namespace MessengerServer.Hubs
 
             await _context.SaveChangesAsync();
 
-            // Отправляем обновленные статусы клиентам
-            var chatId = statuses.FirstOrDefault()?.Message.ChatId;
-            if (chatId.HasValue)
+            // Получаем chatId из первого сообщения
+            var firstMessage = statuses.FirstOrDefault()?.Message;
+            if (firstMessage?.ChatId == null)
             {
-                await Clients.Group($"chat_{chatId}")
-                    .SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
+                Console.WriteLine("ошибка определения id чата");
+                return;
             }
+
+            await Clients.Group($"chat_{firstMessage.ChatId}")
+                .SendAsync("ReceiveMessageStatusUpdate", messageIds, userId);
         }
 
 
