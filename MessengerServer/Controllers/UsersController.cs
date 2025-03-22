@@ -76,7 +76,7 @@ namespace MessengerServer.Controllers
                     IsRead = m.SenderId == userId
                         ? _context.MessageStatuses.Any(ms =>
                             ms.MessageId == m.MessageId &&
-                            ms.UserId != userId && // Проверяем статус от других участников чата
+                            ms.UserId != userId &&
                             ms.Status)
                         : _context.MessageStatuses.Any(ms =>
                             ms.MessageId == m.MessageId &&
@@ -87,6 +87,13 @@ namespace MessengerServer.Controllers
                     FileUrl = m.File != null ? m.File.FileUrl : null
                 })
                 .ToListAsync();
+
+            Console.WriteLine("Сервер возвращает сообщения:");
+            foreach (var msg in messages)
+            {
+                Console.WriteLine($"ID: {msg.MessageId}, IsRead: {msg.IsRead}");
+            }
+
             return Ok(messages);
         }
 
