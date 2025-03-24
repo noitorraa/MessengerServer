@@ -107,41 +107,52 @@ namespace MessengerServer.Hubs
             await _context.SaveChangesAsync();
         }
 
-        public async Task SendFileMessage(int userId, int fileId, int chatId) // нужно поменять, DTO отправлять
+        public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            Console.WriteLine("Метод отправки файлов начал работу");
-
             var file = await _context.Files
-                .FirstOrDefaultAsync(f => f.FileId == fileId); // Явная загрузка файла
+                .Include(f => f.Messages)
+                .FirstOrDefaultAsync(f => f.FileId == fileId);
 
             if (file == null) return;
-
-            Console.WriteLine("Файл не null!");
 
             var message = new Message
             {
                 SenderId = userId,
                 ChatId = chatId,
                 FileId = fileId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                Content = "[Файл]"
             };
 
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
 
-            Console.WriteLine("Файл сохранен в бд!");
+            // Формируем DTO
+            var messageDto = new MessageDto
+            {
+                MessageId = message.MessageId,
+                UserID = userId,
+                CreatedAt = (DateTime)message.CreatedAt,
+                FileId = file.FileId,
+                FileType = file.FileType,
+                FileUrl = file.FileUrl,
+                Status = (int)MessageStatusType.Sent
+            };
 
-            // Добавлена передача контента для унификации
+            // Отправка через общий обработчик
             await Clients.Group($"chat_{chatId}")
-                .SendAsync("ReceiveMessage",
-                    "", // Пустой текст
-                    userId,
-                    message.MessageId,
-                    fileId,
-                    file.FileType,
-                    file.FileUrl);
+                .SendAsync("ReceiveMessage", messageDto);
 
-            Console.WriteLine("Уведы отправлены участникам чата!");
+            // Обновление статусов
+            var recipients = await _context.ChatMembers
+                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
+                .Select(cm => cm.UserId)
+                .ToListAsync();
+
+            foreach (var recipientId in recipients)
+            {
+                await UpdateMessageStatus(message.MessageId, recipientId, (int)MessageStatusType.Delivered);
+            }
         }
 
         // Вход в группу чата
