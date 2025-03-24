@@ -195,6 +195,12 @@ public partial class DefaultDbContext : DbContext
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
                 .HasColumnName("username");
+            entity.Property(e => e.PhoneNumber)
+            .HasColumnType("text")
+            .IsRequired(false);
+            entity.Property(e => e.SmsCodeExpires)
+            .HasColumnType("datetime")
+            .IsRequired(false);
         });
 
         OnModelCreatingPartial(modelBuilder);

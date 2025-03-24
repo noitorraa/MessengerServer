@@ -155,7 +155,7 @@ namespace MessengerServer.Controllers
                     .Select(e => e.ErrorMessage));
             }
 
-            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", ""); // [[5]][[6]]
+            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
 
             // Проверка длины после очистки
             if (user.PhoneNumber.Length < 10 || user.PhoneNumber.Length > 15)
