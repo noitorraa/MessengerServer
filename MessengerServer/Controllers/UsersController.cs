@@ -9,6 +9,10 @@ using Microsoft.AspNet.SignalR;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Newtonsoft.Json;
 using System.Text.Json.Serialization;
+using Amazon.S3.Model;
+using Amazon.S3;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace MessengerServer.Controllers
 {
@@ -248,100 +252,143 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("upload/{chatId}/{userId}")]
-        public async Task<IActionResult> UploadFile(int chatId, int userId, IFormFile file)
+        public async Task<IActionResult> UploadFile(
+        int chatId,
+        int userId,
+        [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
+                     maxSize: 50 * 1024 * 1024)] IFormFile file,
+        [FromServices] IAmazonS3 s3Client,
+        [FromServices] IConfiguration config,
+        [FromServices] ILogger<UsersController> logger)
         {
-            Console.WriteLine($"Вызван UploadFile. ChatId: {chatId}, UserId: {userId}, FileName: {file?.FileName}");
+            using var scope = logger.BeginScope("Upload:{ChatId}:{UserId}", chatId, userId);
 
-            if (file == null || file.Length == 0)
+            try
             {
-                Console.WriteLine("Ошибка: файл не выбран или пуст.");
-                return BadRequest("Файл не выбран");
-            }
+                var (bucketName, publicUrl) = (config["SwiftConfig:BucketName"], config["SwiftConfig:PublicUrl"]);
+                var objectKey = $"chat_{chatId}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+                var fileUrl = $"{publicUrl?.TrimEnd('/')}/{bucketName}/{objectKey}";
 
-            // Проверка типа файла по расширению
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var allowedExtensions = new[]
-            {
-            ".jpg", ".jpeg", ".png", ".gif",
-            ".pdf", ".docx",
-            ".mp4", ".mp3"
-            };
+                // Асинхронная загрузка в S3 с буферизацией
+                using var memoryStream = new MemoryStream();
+                await file.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
 
-            if (!allowedExtensions.Contains(extension))
-            {
-                Console.WriteLine($"Недопустимый тип файла: {extension}");
-                return BadRequest("Недопустимый тип файла");
-            }
-
-            // Проверка размера (50 МБ)
-            if (file.Length > 50 * 1024 * 1024)
-            {
-                Console.WriteLine($"Файл слишком большой: {file.Length} байт");
-                return BadRequest("Файл слишком большой");
-            }
-
-            // Сохранение файла
-            var fileId = Guid.NewGuid().ToString("N");
-            var fileName = $"{fileId}{extension}";
-            var basePath = "/var/www/uploads";
-            var chatDirectory = $"chat_{chatId}";
-            var filePath = Path.Combine(basePath, chatDirectory, fileName);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-            // Определение MIME-типа
-            var fileType = file.ContentType;
-            if (fileType == "application/octet-stream")
-            {
-                fileType = extension switch
+                await s3Client.PutObjectAsync(new PutObjectRequest
                 {
-                    ".jpg" or ".jpeg" => "image/jpeg",
-                    ".png" => "image/png",
-                    ".gif" => "image/gif",
-                    ".pdf" => "application/pdf",
-                    ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    ".mp4" => "video/mp4",
-                    ".mp3" => "audio/mpeg",
-                    _ => "unknown"
+                    BucketName = bucketName,
+                    Key = objectKey,
+                    InputStream = memoryStream,
+                    ContentType = file.ContentType,
+                    AutoCloseStream = false
+                });
+
+                // Пакетное сохранение в БД
+                var dbFile = new Models.File
+                {
+                    FileUrl = fileUrl,
+                    FileType = file.ContentType,
+                    Size = file.Length
                 };
+
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                _context.Files.Add(dbFile);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                logger.LogInformation("File uploaded successfully. ID: {FileId}", dbFile.FileId);
+                return Ok(new { dbFile.FileId, dbFile.FileUrl, dbFile.FileType });
             }
-
-            // Сохранение в БД
-            var dbFile = new Models.File
+            catch (AmazonS3Exception ex)
             {
-                FileUrl = $"/uploads/{chatDirectory}/{fileName}",
-                FileType = fileType,
-                Size = file.Length
-            };
-
-            _context.Files.Add(dbFile);
-            await _context.SaveChangesAsync();
-
-            Console.WriteLine($"Файл сохранен: {dbFile.FileUrl}, тип: {dbFile.FileType}");
-            return Ok(new { fileId = dbFile.FileId, url = dbFile.FileUrl, fileType = dbFile.FileType });
+                logger.LogError("S3 Error: {Code} - {Message}", ex.ErrorCode, ex.Message);
+                return StatusCode(500, "Storage error");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError("Critical error: {Message}", ex.Message);
+                return StatusCode(500, "Internal server error");
+            }
         }
 
         [HttpGet("{fileId}")]
-        public async Task<IActionResult> GetFile(int fileId)
+        public async Task<IActionResult> GetFile(
+        int fileId,
+        [FromServices] IAmazonS3 s3Client,
+        [FromServices] ILogger<UsersController> logger)
         {
-            Console.WriteLine("Получение файлов (api): метод начал свою работу");
+            try
+            {
+                var file = await _context.Files
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(f => f.FileId == fileId);
 
-            var file = await _context.Files.FindAsync(fileId);
-            if (file == null) return NotFound();
+                return file == null
+                    ? NotFound()
+                    : RedirectPreserveMethod(file.FileUrl);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError("File error: {Message}", ex.Message);
+                return StatusCode(500);
+            }
+        }
 
-            Console.WriteLine("Получение файлов (api): файл существует");
+        public class ValidateFileAttribute : Attribute, IParameterModelConvention
+        {
+            private readonly string[] _allowedExtensions;
+            private readonly long _maxSize;
 
-            var relativePath = file.FileUrl.Replace("/uploads/", ""); // Удаляем часть /uploads из URL
-            var filePath = Path.Combine("/var/www/uploads", relativePath);
+            public ValidateFileAttribute(string[] allowedExtensions, long maxSize)
+            {
+                _allowedExtensions = allowedExtensions;
+                _maxSize = maxSize;
+            }
 
-            Console.WriteLine("Получение файлов (api): путь к файлу отправлен на клиент");
+            public void Apply(ParameterModel parameter)
+            {
+                if (parameter.ParameterType == typeof(IFormFile))
+                {
+                    parameter.Action.Filters.Add(new ValidateFileFilter(_allowedExtensions, _maxSize));
+                }
+            }
+        }
 
-            return PhysicalFile(filePath, file.FileType);
+        public class ValidateFileFilter : IAsyncActionFilter
+        {
+            private readonly string[] _allowedExtensions;
+            private readonly long _maxSize;
+
+            public ValidateFileFilter(string[] allowedExtensions, long maxSize)
+            {
+                _allowedExtensions = allowedExtensions;
+                _maxSize = maxSize;
+            }
+
+            public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+            {
+                if (!context.ActionArguments.TryGetValue("file", out var fileObj) ||
+                    !(fileObj is IFormFile file))
+                {
+                    context.Result = new BadRequestObjectResult("File required");
+                    return;
+                }
+
+                var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+                if (!_allowedExtensions.Contains(extension))
+                {
+                    context.Result = new BadRequestObjectResult("Invalid file type");
+                    return;
+                }
+
+                if (file.Length > _maxSize)
+                {
+                    context.Result = new BadRequestObjectResult("File too large");
+                    return;
+                }
+
+                await next();
+            }
         }
 
         // В UsersController.cs
