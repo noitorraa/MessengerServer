@@ -271,15 +271,10 @@ namespace MessengerServer.Controllers
                 var objectKey = $"chat_{chatId}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
                 var fileUrl = $"{publicUrl?.TrimEnd('/')}/{bucketName}/{objectKey}";
 
-                // Асинхронная загрузка в S3 с буферизацией
+                // Загрузка файла в S3
                 using var memoryStream = new MemoryStream();
                 await file.CopyToAsync(memoryStream);
-                memoryStream.Position = 0; // Сброс позиции перед чтением
-                                           // Явно проверьте длину потока
-                if (memoryStream.Length != file.Length)
-                {
-                    throw new InvalidOperationException("Повреждение данных при копировании файла");
-                }
+                memoryStream.Position = 0; // Сброс позиции потока
 
                 var putRequest = new PutObjectRequest
                 {
@@ -287,22 +282,22 @@ namespace MessengerServer.Controllers
                     Key = objectKey,
                     InputStream = memoryStream,
                     ContentType = file.ContentType,
-                    AutoCloseStream = false
+                    AutoCloseStream = true // Автоматическое закрытие потока
                 };
 
-                await s3Client.PutObjectAsync(putRequest);
-
-                await s3Client.PutObjectAsync(new PutObjectRequest
+                // Убедитесь, что бакет существует
+                var bucketExists = await s3Client.DoesS3BucketExistAsync(bucketName);
+                if (!bucketExists)
                 {
-                    BucketName = bucketName,
-                    Key = objectKey,
-                    InputStream = memoryStream,
-                    ContentType = file.ContentType,
-                    AutoCloseStream = false
-                });
+                    logger.LogError("Bucket {BucketName} does not exist", bucketName);
+                    return StatusCode(500, "Bucket not found");
+                }
 
+                // Однократная загрузка файла
+                var response = await s3Client.PutObjectAsync(putRequest);
+                logger.LogInformation("S3 upload status: {StatusCode}", response.HttpStatusCode);
 
-                // Пакетное сохранение в БД
+                // Сохранение информации о файле в БД
                 var dbFile = new Models.File
                 {
                     FileUrl = fileUrl,
@@ -310,10 +305,8 @@ namespace MessengerServer.Controllers
                     Size = file.Length
                 };
 
-                await using var transaction = await _context.Database.BeginTransactionAsync();
                 _context.Files.Add(dbFile);
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
 
                 logger.LogInformation("File uploaded successfully. ID: {FileId}", dbFile.FileId);
                 return Ok(new { dbFile.FileId, dbFile.FileUrl, dbFile.FileType });
@@ -321,12 +314,12 @@ namespace MessengerServer.Controllers
             catch (AmazonS3Exception ex)
             {
                 logger.LogError("S3 Error: {Code} - {Message}", ex.ErrorCode, ex.Message);
-                return StatusCode(500, "Storage error");
+                return StatusCode(500, $"S3 error: {ex.Message}");
             }
             catch (Exception ex)
             {
                 logger.LogError("Critical error: {Message}", ex.Message);
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, $"Internal error: {ex.Message}");
             }
         }
 
