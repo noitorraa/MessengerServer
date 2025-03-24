@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNet.SignalR.Hubs;
 using Amazon.DynamoDBv2.Model;
+using System.Text.RegularExpressions;
 
 namespace MessengerServer.Controllers
 {
@@ -26,6 +27,8 @@ namespace MessengerServer.Controllers
         private readonly DefaultDbContext _context;
         private ChatHub _chatHub;
         private readonly IServiceProvider _serviceProvider;
+        private static readonly Dictionary<string, string> _smsCodes = new();
+        private static readonly Random _rnd = new();
 
         public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env)
         {
@@ -147,8 +150,19 @@ namespace MessengerServer.Controllers
 
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage));
             }
+
+            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", ""); // [[5]][[6]]
+
+            // Проверка длины после очистки
+            if (user.PhoneNumber.Length < 10 || user.PhoneNumber.Length > 15)
+            {
+                return BadRequest("Неверный формат телефона");
+            }
+
 
             // Хешируем пароль перед сохранением
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
@@ -227,6 +241,42 @@ namespace MessengerServer.Controllers
                 .SendAsync("NotifyUpdateChatList");
 
             return Ok(chat);
+        }
+
+        [HttpPost("send-reset-code")]
+        public ActionResult SendResetCode(string phone)
+        {
+            var user = _context.Users.FirstOrDefault(u => u.PhoneNumber == phone);
+            if (user == null) return NotFound();
+
+            var code = _rnd.Next(1000, 9999).ToString();
+            _smsCodes[phone] = code;
+
+            // Отправка SMS через API (пример с Twilio)
+            // await _smsService.SendAsync(phone, $"Your code: {code}");
+
+            user.SmsCodeExpires = DateTime.UtcNow.AddMinutes(5);
+            _context.SaveChanges();
+
+            return Ok();
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<ActionResult> ResetPassword(ResetModel model)
+        {
+            if (!_smsCodes.TryGetValue(model.Phone, out var storedCode) ||
+                storedCode != model.Code)
+                return BadRequest("Invalid code");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.Phone);
+            if (user == null || user.SmsCodeExpires < DateTime.UtcNow)
+                return BadRequest("Code expired");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
+            _smsCodes.Remove(model.Phone);
+            await _context.SaveChangesAsync();
+
+            return Ok();
         }
 
         //[HttpGet("chats/{chatId}")]
@@ -314,6 +364,7 @@ namespace MessengerServer.Controllers
             }
         }
 
+
         [HttpGet("{fileId}")]
         public async Task<IActionResult> GetFile(
         int fileId,
@@ -392,6 +443,15 @@ namespace MessengerServer.Controllers
 
                 await next();
             }
+
+            
+        }
+
+        public class ResetModel
+        {
+            public string Phone { get; set; }
+            public string Code { get; set; }
+            public string NewPassword { get; set; }
         }
 
         // В UsersController.cs
