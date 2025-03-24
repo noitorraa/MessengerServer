@@ -255,26 +255,24 @@ namespace MessengerServer.Controllers
 
         [HttpPost("upload/{chatId}/{userId}")]
         public async Task<IActionResult> UploadFile(
-        int chatId,
-        int userId,
-        [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
-                     maxSize: 50 * 1024 * 1024)] IFormFile file,
-        [FromServices] IAmazonS3 s3Client,
-        [FromServices] IConfiguration config,
-        [FromServices] ILogger<UsersController> logger)
+    int chatId,
+    int userId,
+    [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
+                 maxSize: 50 * 1024 * 1024)] IFormFile file,
+    [FromServices] IAmazonS3 s3Client,
+    [FromServices] IConfiguration config,
+    [FromServices] ILogger<UsersController> logger)
         {
             using var scope = logger.BeginScope("Upload:{ChatId}:{UserId}", chatId, userId);
-
             try
             {
                 var (bucketName, publicUrl) = (config["SwiftConfig:BucketName"], config["SwiftConfig:PublicUrl"]);
                 var objectKey = $"chat_{chatId}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-                var fileUrl = $"{publicUrl?.TrimEnd('/')}/{bucketName}/{objectKey}";
+                var fileUrl = $"{publicUrl.TrimEnd('/')}/{bucketName}/{objectKey}";
 
-                // Загрузка файла в S3
                 using var memoryStream = new MemoryStream();
                 await file.CopyToAsync(memoryStream);
-                memoryStream.Position = 0; // Сброс позиции потока
+                memoryStream.Position = 0; // Сброс позиции
 
                 var putRequest = new PutObjectRequest
                 {
@@ -282,22 +280,13 @@ namespace MessengerServer.Controllers
                     Key = objectKey,
                     InputStream = memoryStream,
                     ContentType = file.ContentType,
-                    AutoCloseStream = true // Автоматическое закрытие потока
+                    AutoCloseStream = false
                 };
 
-                // Убедитесь, что бакет существует
-                var bucketExists = await s3Client.DoesS3BucketExistAsync(bucketName);
-                if (!bucketExists)
-                {
-                    logger.LogError("Bucket {BucketName} does not exist", bucketName);
-                    return StatusCode(500, "Bucket not found");
-                }
+                // Однократная загрузка
+                await s3Client.PutObjectAsync(putRequest);
 
-                // Однократная загрузка файла
-                var response = await s3Client.PutObjectAsync(putRequest);
-                logger.LogInformation("S3 upload status: {StatusCode}", response.HttpStatusCode);
-
-                // Сохранение информации о файле в БД
+                // Сохранение в БД
                 var dbFile = new Models.File
                 {
                     FileUrl = fileUrl,
@@ -305,21 +294,23 @@ namespace MessengerServer.Controllers
                     Size = file.Length
                 };
 
+                await using var transaction = await _context.Database.BeginTransactionAsync();
                 _context.Files.Add(dbFile);
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
-                logger.LogInformation("File uploaded successfully. ID: {FileId}", dbFile.FileId);
+                logger.LogInformation("File uploaded successfully. ID: "+dbFile.FileId);
                 return Ok(new { dbFile.FileId, dbFile.FileUrl, dbFile.FileType });
             }
             catch (AmazonS3Exception ex)
             {
-                logger.LogError("S3 Error: {Code} - {Message}", ex.ErrorCode, ex.Message);
-                return StatusCode(500, $"S3 error: {ex.Message}");
+                logger.LogError("S3 Error: "+ ex.ErrorCode + " - "+ex.Message+"");
+                return StatusCode(500, "Storage error");
             }
             catch (Exception ex)
             {
-                logger.LogError("Critical error: {Message}", ex.Message);
-                return StatusCode(500, $"Internal error: {ex.Message}");
+                logger.LogError("Critical error: "+ex.Message);
+                return StatusCode(500, "Internal server error");
             }
         }
 
