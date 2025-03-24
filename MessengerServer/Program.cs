@@ -9,6 +9,7 @@ using MessengerServer;
 using Amazon.S3;
 using Amazon.Runtime;
 using Microsoft.Extensions.FileProviders;
+using Amazon;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,29 +27,19 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IAmazonS3>(provider =>
 {
     var config = provider.GetRequiredService<IConfiguration>();
-    var logger = provider.GetRequiredService<ILogger<Program>>();
-
-    try
-    {
-        logger.LogInformation("Инициализация S3 клиента...");
-        return new AmazonS3Client(
-            new BasicAWSCredentials(
-                config["SwiftConfig:AccessKey"],
-                config["SwiftConfig:SecretKey"]),
-            new AmazonS3Config
-            {
-                ServiceURL = config["SwiftConfig:ServiceURL"],
-                ForcePathStyle = true,
-                Timeout = TimeSpan.FromSeconds(30),
-                MaxErrorRetry = 2
-            });
-    }
-    catch (Exception ex)
-    {
-        logger.LogCritical(ex, "Ошибка инициализации S3 клиента");
-        throw;
-    }
+    return new AmazonS3Client(
+        new BasicAWSCredentials(
+            config["SwiftConfig:AccessKey"],
+            config["SwiftConfig:SecretKey"]),
+        new AmazonS3Config
+        {
+            ServiceURL = config["SwiftConfig:ServiceURL"],
+            ForcePathStyle = true,  // Обязательно для Swift
+            SignatureVersion = "4",
+            UseAccelerateEndpoint = false
+        });
 });
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
