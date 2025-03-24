@@ -13,6 +13,8 @@ using Amazon.S3.Model;
 using Amazon.S3;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNet.SignalR.Hubs;
+using Amazon.DynamoDBv2.Model;
 
 namespace MessengerServer.Controllers
 {
@@ -272,7 +274,23 @@ namespace MessengerServer.Controllers
                 // Асинхронная загрузка в S3 с буферизацией
                 using var memoryStream = new MemoryStream();
                 await file.CopyToAsync(memoryStream);
-                memoryStream.Position = 0;
+                memoryStream.Position = 0; // Сброс позиции перед чтением
+                                           // Явно проверьте длину потока
+                if (memoryStream.Length != file.Length)
+                {
+                    throw new InvalidOperationException("Повреждение данных при копировании файла");
+                }
+
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = bucketName,
+                    Key = objectKey,
+                    InputStream = memoryStream,
+                    ContentType = file.ContentType,
+                    AutoCloseStream = false
+                };
+
+                await s3Client.PutObjectAsync(putRequest);
 
                 await s3Client.PutObjectAsync(new PutObjectRequest
                 {
@@ -282,6 +300,7 @@ namespace MessengerServer.Controllers
                     ContentType = file.ContentType,
                     AutoCloseStream = false
                 });
+
 
                 // Пакетное сохранение в БД
                 var dbFile = new Models.File

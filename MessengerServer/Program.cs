@@ -34,11 +34,12 @@ builder.Services.AddSingleton<IAmazonS3>(provider =>
         new AmazonS3Config
         {
             ServiceURL = config["SwiftConfig:ServiceURL"],
-            ForcePathStyle = true,  // Обязательно для Swift
-            SignatureVersion = "4",
-            UseAccelerateEndpoint = false
+            ForcePathStyle = true,  // Обязательно для S3-совместимых хранилищ
+            SignatureVersion = "4"  // Используйте v4 для Timeweb
         });
 });
+
+
 
 builder.Services.AddCors(options =>
 {
