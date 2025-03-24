@@ -109,15 +109,8 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            Console.WriteLine("Метод отправки файлов начал работу");
-
-            var file = await _context.Files
-                .Include(f => f.Messages)
-                .FirstOrDefaultAsync(f => f.FileId == fileId);
-
+            var file = await _context.Files.FindAsync(fileId);
             if (file == null) return;
-
-            Console.WriteLine("Отправка файлов: файл не пустой");
 
             var message = new Message
             {
@@ -125,15 +118,13 @@ namespace MessengerServer.Hubs
                 ChatId = chatId,
                 FileId = fileId,
                 CreatedAt = DateTime.UtcNow,
-                Content = "[Файл]"
+                Content = $"[Файл: {Path.GetFileName(file.FileUrl)}]"
             };
 
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
 
-            Console.WriteLine("Отправка файлов: файл сохранен");
-
-            // Формируем DTO
+            // Формирование DTO
             var messageDto = new MessageDto
             {
                 MessageId = message.MessageId,
@@ -142,14 +133,12 @@ namespace MessengerServer.Hubs
                 FileId = file.FileId,
                 FileType = file.FileType,
                 FileUrl = file.FileUrl,
-                Status = (int)MessageStatusType.Sent
+                Status = (int)MessageStatusType.Sent,
+                Content = message.Content
             };
 
             // Отправка через общий обработчик
-            await Clients.Group($"chat_{chatId}")
-                .SendAsync("ReceiveMessage", messageDto);
-
-            Console.WriteLine("Отправка файлов: файл отправлен другим пользователям");
+            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", messageDto);
 
             // Обновление статусов
             var recipients = await _context.ChatMembers
@@ -161,8 +150,6 @@ namespace MessengerServer.Hubs
             {
                 await UpdateMessageStatus(message.MessageId, recipientId, (int)MessageStatusType.Delivered);
             }
-
-            Console.WriteLine("Отправка файлов: статус сообщения обновлён");
         }
 
         // Вход в группу чата

@@ -250,45 +250,77 @@ namespace MessengerServer.Controllers
         [HttpPost("upload/{chatId}/{userId}")]
         public async Task<IActionResult> UploadFile(int chatId, int userId, IFormFile file)
         {
-            Console.WriteLine("Отправка файлов (api): метод начал свою работу");
+            Console.WriteLine($"Вызван UploadFile. ChatId: {chatId}, UserId: {userId}, FileName: {file?.FileName}");
 
             if (file == null || file.Length == 0)
+            {
+                Console.WriteLine("Ошибка: файл не выбран или пуст.");
                 return BadRequest("Файл не выбран");
+            }
 
-            Console.WriteLine("Отправка файлов (api): файл не пустой");
+            // Проверка типа файла по расширению
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowedExtensions = new[]
+            {
+            ".jpg", ".jpeg", ".png", ".gif",
+            ".pdf", ".docx",
+            ".mp4", ".mp3"
+            };
 
-            // Генерация уникального имени
-            var fileId = Guid.NewGuid().ToString("N");
-            var extension = Path.GetExtension(file.FileName);
-            var fileName = $"{fileId}{extension}";
-            var filePath = Path.Combine(_env.ContentRootPath, "uploads", $"chat_{chatId}", fileName);
+            if (!allowedExtensions.Contains(extension))
+            {
+                Console.WriteLine($"Недопустимый тип файла: {extension}");
+                return BadRequest("Недопустимый тип файла");
+            }
 
-            // Создание папки, если не существует
-            var dir = Path.GetDirectoryName(filePath);
-            Directory.CreateDirectory(dir);
+            // Проверка размера (50 МБ)
+            if (file.Length > 50 * 1024 * 1024)
+            {
+                Console.WriteLine($"Файл слишком большой: {file.Length} байт");
+                return BadRequest("Файл слишком большой");
+            }
 
             // Сохранение файла
+            var fileId = Guid.NewGuid().ToString("N");
+            var fileName = $"{fileId}{extension}";
+            var filePath = Path.Combine(_env.ContentRootPath, "uploads", $"chat_{chatId}", fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await file.CopyToAsync(stream);
             }
 
-            Console.WriteLine("Отправка файлов (api): файл сохранен на сервере");
+            // Определение MIME-типа
+            var fileType = file.ContentType;
+            if (fileType == "application/octet-stream")
+            {
+                fileType = extension switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".gif" => "image/gif",
+                    ".pdf" => "application/pdf",
+                    ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ".mp4" => "video/mp4",
+                    ".mp3" => "audio/mpeg",
+                    _ => "unknown"
+                };
+            }
 
             // Сохранение в БД
             var dbFile = new Models.File
             {
                 FileUrl = $"/uploads/chat_{chatId}/{fileName}",
-                FileType = file.ContentType,
+                FileType = fileType,
                 Size = file.Length
             };
 
             _context.Files.Add(dbFile);
             await _context.SaveChangesAsync();
 
-            Console.WriteLine("Отправка файлов (api): файл сохранен в базе данных");
-
-            return Ok(new { fileId = dbFile.FileId, url = dbFile.FileUrl });
+            Console.WriteLine($"Файл сохранен: {dbFile.FileUrl}, тип: {dbFile.FileType}");
+            return Ok(new { fileId = dbFile.FileId, url = dbFile.FileUrl, fileType = dbFile.FileType });
         }
 
         [HttpGet("{fileId}")]
