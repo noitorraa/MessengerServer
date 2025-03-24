@@ -109,11 +109,15 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
+            Console.WriteLine("Метод отправки файлов начал работу");
+
             var file = await _context.Files
                 .Include(f => f.Messages)
                 .FirstOrDefaultAsync(f => f.FileId == fileId);
 
             if (file == null) return;
+
+            Console.WriteLine("Отправка файлов: файл не пустой");
 
             var message = new Message
             {
@@ -126,6 +130,8 @@ namespace MessengerServer.Hubs
 
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
+
+            Console.WriteLine("Отправка файлов: файл сохранен");
 
             // Формируем DTO
             var messageDto = new MessageDto
@@ -143,6 +149,8 @@ namespace MessengerServer.Hubs
             await Clients.Group($"chat_{chatId}")
                 .SendAsync("ReceiveMessage", messageDto);
 
+            Console.WriteLine("Отправка файлов: файл отправлен другим пользователям");
+
             // Обновление статусов
             var recipients = await _context.ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
@@ -153,6 +161,8 @@ namespace MessengerServer.Hubs
             {
                 await UpdateMessageStatus(message.MessageId, recipientId, (int)MessageStatusType.Delivered);
             }
+
+            Console.WriteLine("Отправка файлов: статус сообщения обновлён");
         }
 
         // Вход в группу чата

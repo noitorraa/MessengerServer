@@ -250,8 +250,12 @@ namespace MessengerServer.Controllers
         [HttpPost("upload/{chatId}/{userId}")]
         public async Task<IActionResult> UploadFile(int chatId, int userId, IFormFile file)
         {
+            Console.WriteLine("Отправка файлов (api): метод начал свою работу");
+
             if (file == null || file.Length == 0)
                 return BadRequest("Файл не выбран");
+
+            Console.WriteLine("Отправка файлов (api): файл не пустой");
 
             // Генерация уникального имени
             var fileId = Guid.NewGuid().ToString("N");
@@ -269,6 +273,8 @@ namespace MessengerServer.Controllers
                 await file.CopyToAsync(stream);
             }
 
+            Console.WriteLine("Отправка файлов (api): файл сохранен на сервере");
+
             // Сохранение в БД
             var dbFile = new Models.File
             {
@@ -280,16 +286,25 @@ namespace MessengerServer.Controllers
             _context.Files.Add(dbFile);
             await _context.SaveChangesAsync();
 
+            Console.WriteLine("Отправка файлов (api): файл сохранен в базе данных");
+
             return Ok(new { fileId = dbFile.FileId, url = dbFile.FileUrl });
         }
 
         [HttpGet("{fileId}")]
         public async Task<IActionResult> GetFile(int fileId)
         {
+            Console.WriteLine("Получение файлов (api): метод начал свою работу");
+
             var file = await _context.Files.FindAsync(fileId);
             if (file == null) return NotFound();
 
+            Console.WriteLine("Получение файлов (api): файл существует");
+
             var filePath = Path.Combine(_env.ContentRootPath, file.FileUrl.TrimStart('/'));
+
+            Console.WriteLine("Получение файлов (api): путь к файлу отправлен на клиент");
+
             return PhysicalFile(filePath, file.FileType);
         }
 
