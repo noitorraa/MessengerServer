@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json.Serialization;
 using MessengerServer;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +57,12 @@ else
 { 
     app.UseHttpsRedirection();
 }
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider("/var/www/uploads"),
+    RequestPath = "/uploads"
+});
 
 app.UseAuthorization();
 

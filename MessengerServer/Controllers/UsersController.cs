@@ -283,7 +283,10 @@ namespace MessengerServer.Controllers
             // Сохранение файла
             var fileId = Guid.NewGuid().ToString("N");
             var fileName = $"{fileId}{extension}";
-            var filePath = Path.Combine(_env.ContentRootPath, "uploads", $"chat_{chatId}", fileName);
+            var basePath = "/var/www/uploads";
+            var chatDirectory = $"chat_{chatId}";
+            var filePath = Path.Combine(basePath, chatDirectory, fileName);
+
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -311,7 +314,7 @@ namespace MessengerServer.Controllers
             // Сохранение в БД
             var dbFile = new Models.File
             {
-                FileUrl = $"/uploads/chat_{chatId}/{fileName}",
+                FileUrl = $"/uploads/{chatDirectory}/{fileName}",
                 FileType = fileType,
                 Size = file.Length
             };
@@ -333,7 +336,8 @@ namespace MessengerServer.Controllers
 
             Console.WriteLine("Получение файлов (api): файл существует");
 
-            var filePath = Path.Combine(_env.ContentRootPath, file.FileUrl.TrimStart('/'));
+            var relativePath = file.FileUrl.Replace("/uploads/", ""); // Удаляем часть /uploads из URL
+            var filePath = Path.Combine("/var/www/uploads", relativePath);
 
             Console.WriteLine("Получение файлов (api): путь к файлу отправлен на клиент");
 
