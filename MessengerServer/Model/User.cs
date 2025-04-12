@@ -22,8 +22,6 @@ public partial class User
         ErrorMessage = "Неверный формат телефона")]
     [StringLength(19, MinimumLength = 10, ErrorMessage = "Телефон: 10-19 цифр")]
     public string PhoneNumber { get; set; }
-    [Column(TypeName = "datetime")]
-    public DateTime? SmsCodeExpires { get; set; } 
 
     public virtual ICollection<ChatMember> ChatMembers { get; set; } = new List<ChatMember>();
 

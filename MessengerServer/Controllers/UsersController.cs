@@ -16,6 +16,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNet.SignalR.Hubs;
 using Amazon.DynamoDBv2.Model;
 using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
+using System.Numerics;
 
 namespace MessengerServer.Controllers
 {
@@ -25,29 +27,115 @@ namespace MessengerServer.Controllers
     {
         private readonly IWebHostEnvironment _env;
         private readonly DefaultDbContext _context;
-        private ChatHub _chatHub;
         private readonly IServiceProvider _serviceProvider;
-        private static readonly Dictionary<string, string> _smsCodes = new();
-        private static readonly Random _rnd = new();
+        private readonly Timer _cleanupTimer;
+
+        // Хранилище кодов для сброса пароля (существует ранее)
+        private static readonly ConcurrentDictionary<string, string> _smsCodes = new();
+        private static readonly ConcurrentDictionary<string, int> _retryCount = new();
+        
+        // Хранилище для кодов сброса паролей
+        private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
+        private static readonly ConcurrentDictionary<string, int> _smsResetRetryCount = new();
+
+
+        // Новое хранилище для кода подтверждения регистрации
+        private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _pendingVerifications = new();
+        private static readonly ConcurrentDictionary<string, int> _verificationRetryCount = new();
+
+        // Хранилище подтверждённых номеров телефонов
+        private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
+
 
         public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env)
         {
             _env = env;
             _context = context;
             _serviceProvider = serviceProvider;
+            _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+        }
+
+        private async void CleanupExpiredData(object state)
+        {
+            // Очистка просроченных кодов для регистрации
+            var expired = _pendingVerifications
+                .Where(kvp => kvp.Value.Expires < DateTime.UtcNow)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            foreach (var phone in expired)
+            {
+                _pendingVerifications.TryRemove(phone, out _);
+                _verificationRetryCount.TryRemove(phone, out _);
+            }
+
+            // Если требуется, можно добавить очистку для подтверждённых номеров
+            await Task.CompletedTask;
         }
 
         [HttpGet("authorization")]
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login);
-
             if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 return NotFound(new { Message = "Пользователь не найден" });
             }
-
             return Ok(user);
+        }
+
+        [HttpPost("send-verification-code")]
+        public IActionResult SendVerificationCode(string phone)
+        {
+            // Приводим номер к стандартному виду – оставляем только цифры
+            phone = Regex.Replace(phone ?? "", @"[^\d]", "");
+            if (string.IsNullOrEmpty(phone))
+            {
+                return BadRequest("Неверный формат телефона");
+            }
+
+            // Ограничение количества попыток
+            var retry = _verificationRetryCount.AddOrUpdate(phone, 1, (k, v) => v + 1);
+            if (retry > 5)
+            {
+                return BadRequest("Слишком много попыток. Попробуйте позже.");
+            }
+
+            // Генерируем случайный 6-значный код
+            var code = new Random().Next(100000, 999999).ToString();
+            var expiration = DateTime.UtcNow.AddMinutes(5);
+            _pendingVerifications[phone] = (code, expiration);
+
+            Console.WriteLine($"Code: {code}, phone: {phone}");
+            // Здесь нужно добавить вызов API для реальной отправки СМС, например:
+            // await _smsService.SendAsync(phone, $"Ваш код: {code}");
+            // Пока что имитируем отправку (можно записать в лог)
+
+            return Ok("Код отправлен");
+        }
+
+        // Endpoint для проверки кода подтверждения регистрации
+        [HttpPost("verify-code")]
+        public IActionResult VerifyCode(string phone, string code)
+        {
+            // Приводим номер к стандартному виду
+            phone = Regex.Replace(phone ?? "", @"[^\d]", "");
+            if (!_pendingVerifications.TryGetValue(phone, out var codeInfo))
+            {
+                return BadRequest("Код не найден или просрочен");
+            }
+            if (codeInfo.Expires < DateTime.UtcNow)
+            {
+                _pendingVerifications.TryRemove(phone, out _);
+                return BadRequest("Срок действия кода истёк");
+            }
+            if (codeInfo.Code != code)
+            {
+                return BadRequest("Неверный код подтверждения");
+            }
+            // После успешной проверки удаляем код и помечаем номер как подтверждённый
+            _pendingVerifications.TryRemove(phone, out _);
+            _verifiedPhones[phone] = true;
+            return Ok("Код подтверждён");
         }
 
         [HttpGet("chats/{userId}")]
@@ -143,28 +231,29 @@ namespace MessengerServer.Controllers
         [HttpPost("registration")]
         public async Task<IActionResult> Registration([FromBody] User user)
         {
+            // Чистим номер телефона от лишних символов
+            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
+            // Проверяем, что номер был ранее подтверждён
+            if (!_verifiedPhones.TryGetValue(user.PhoneNumber, out var verified) || !verified)
+            {
+                return BadRequest("Номер телефона не подтверждён");
+            }
+            // Удаляем запись о подтверждении, чтобы не использовать её повторно
+            _verifiedPhones.TryRemove(user.PhoneNumber, out _);
+
             if (await _context.Users.AnyAsync(u => u.Username == user.Username))
             {
                 return Conflict(new { Message = "Username already exists." });
             }
-
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState.Values
-                    .SelectMany(v => v.Errors)
-                    .Select(e => e.ErrorMessage));
+                return BadRequest(ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             }
-
-            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
-
-            // Проверка длины после очистки
             if (user.PhoneNumber.Length < 10 || user.PhoneNumber.Length > 15)
             {
                 return BadRequest("Неверный формат телефона");
             }
-
-
-            // Хешируем пароль перед сохранением
+            // Хэшируем пароль (на сервере требуется хранить хэш, а не сырой пароль)
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
 
             _context.Users.Add(user);
@@ -244,50 +333,80 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("send-reset-code")]
-        public ActionResult SendResetCode(string phone)
+        public IActionResult SendResetCode(string phone)
         {
+            // Приводим номер к стандартному виду: оставляем только цифры
+            phone = Regex.Replace(phone ?? "", @"[^\d]", "");
+
+            // Ищем пользователя с таким телефоном
             var user = _context.Users.FirstOrDefault(u => u.PhoneNumber == phone);
-            if (user == null) return NotFound();
+            if (user == null)
+            {
+                return NotFound("Пользователь не найден");
+            }
 
-            var code = _rnd.Next(1000, 9999).ToString();
-            _smsCodes[phone] = code;
+            // Ограничение количества попыток отправки кода (максимум 5)
+            int retry = _smsResetRetryCount.AddOrUpdate(phone, 1, (k, v) => v + 1);
+            if (retry > 5)
+            {
+                return BadRequest("Слишком много попыток. Попробуйте позже.");
+            }
 
-            // Отправка SMS через API (пример с Twilio)
-            // await _smsService.SendAsync(phone, $"Your code: {code}");
+            // Генерируем случайный 6-значный код и устанавливаем время его жизни (5 минут)
+            var code = new Random().Next(100000, 999999).ToString();
+            var expiration = DateTime.UtcNow.AddMinutes(5);
+            _smsResetCodes[phone] = (code, expiration);
 
-            user.SmsCodeExpires = DateTime.UtcNow.AddMinutes(5);
-            _context.SaveChanges();
+            // Здесь необходимо вызвать реальный API для отправки SMS, например:
+            // await _smsService.SendAsync(phone, $"Ваш код для сброса пароля: {code}");
 
-            return Ok();
+            return Ok("Код отправлен");
         }
+
 
         [HttpPost("reset-password")]
-        public async Task<ActionResult> ResetPassword(ResetModel model)
+        public async Task<IActionResult> ResetPassword(ResetModel model)
         {
-            if (!_smsCodes.TryGetValue(model.Phone, out var storedCode) ||
-                storedCode != model.Code)
-                return BadRequest("Invalid code");
+            // Приводим номер к стандартному виду
+            string phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.Phone);
-            if (user == null || user.SmsCodeExpires < DateTime.UtcNow)
-                return BadRequest("Code expired");
+            // Проверяем, существует ли пользователь с таким телефоном
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone);
+            if (user == null)
+            {
+                return NotFound("Пользователь не найден");
+            }
 
+            // Проверяем наличие кода в памяти
+            if (!_smsResetCodes.TryGetValue(phone, out var codeInfo))
+            {
+                return BadRequest("Код не найден или просрочен");
+            }
+
+            // Если время действия кода истекло, удаляем запись и возвращаем ошибку
+            if (codeInfo.Expires < DateTime.UtcNow)
+            {
+                _smsResetCodes.TryRemove(phone, out _);
+                return BadRequest("Срок действия кода истек");
+            }
+
+            // Проверяем соответствие введенного кода отправленному
+            if (codeInfo.Code != model.Code)
+            {
+                return BadRequest("Неверный код подтверждения");
+            }
+
+            // Если проверка кода прошла успешно, обновляем пароль пользователя
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
-            _smsCodes.Remove(model.Phone);
+
+            // Очищаем код из памяти, чтобы повторно им нельзя было воспользоваться
+            _smsResetCodes.TryRemove(phone, out _);
+
             await _context.SaveChangesAsync();
 
-            return Ok();
+            return Ok("Пароль успешно изменен");
         }
 
-        //[HttpGet("chats/{chatId}")]
-        //public async Task<ActionResult<Chat>> GetChatById(int chatId)
-        //{
-        //    var chat = await _context.Chats
-        //        .Include(c => c.ChatMembers)
-        //        .FirstOrDefaultAsync(c => c.ChatId == chatId);
-
-        //    return chat != null ? Ok(chat) : NotFound();
-        //}
 
         [HttpGet("chats/existing")]
         public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
@@ -305,13 +424,13 @@ namespace MessengerServer.Controllers
 
         [HttpPost("upload/{chatId}/{userId}")]
         public async Task<IActionResult> UploadFile(
-    int chatId,
-    int userId,
-    [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
-                 maxSize: 50 * 1024 * 1024)] IFormFile file,
-    [FromServices] IAmazonS3 s3Client,
-    [FromServices] IConfiguration config,
-    [FromServices] ILogger<UsersController> logger)
+        int chatId,
+        int userId,
+        [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
+                     maxSize: 50 * 1024 * 1024)] IFormFile file,
+        [FromServices] IAmazonS3 s3Client,
+        [FromServices] IConfiguration config,
+        [FromServices] ILogger<UsersController> logger)
         {
             using var scope = logger.BeginScope("Upload:{ChatId}:{UserId}", chatId, userId);
             try
