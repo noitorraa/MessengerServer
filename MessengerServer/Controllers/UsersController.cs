@@ -31,8 +31,8 @@ namespace MessengerServer.Controllers
         private readonly Timer _cleanupTimer;
 
         // Хранилище кодов для сброса пароля (существует ранее)
-        private static readonly ConcurrentDictionary<string, string> _smsCodes = new();
-        private static readonly ConcurrentDictionary<string, int> _retryCount = new();
+        //private static readonly ConcurrentDictionary<string, string> _smsCodes = new();
+        //private static readonly ConcurrentDictionary<string, int> _retryCount = new();
         
         // Хранилище для кодов сброса паролей
         private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
@@ -108,7 +108,6 @@ namespace MessengerServer.Controllers
             Console.WriteLine($"Code: {code}, phone: {phone}");
             // Здесь нужно добавить вызов API для реальной отправки СМС, например:
             // await _smsService.SendAsync(phone, $"Ваш код: {code}");
-            // Пока что имитируем отправку (можно записать в лог)
 
             return Ok("Код отправлен");
         }
@@ -206,27 +205,46 @@ namespace MessengerServer.Controllers
         [HttpDelete("chats/{chatId}")]
         public async Task<IActionResult> DeleteChat(int chatId)
         {
-            var chat = await _context.Chats
-                .Include(c => c.ChatMembers)
-                .Include(c => c.Messages)
-                .FirstOrDefaultAsync(c => c.ChatId == chatId);
+            // Начинаем транзакцию
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (chat == null)
-                return NotFound(new { Message = "Чат не найден" });
+            try
+            {
+                var chat = await _context.Chats
+                    .Include(c => c.ChatMembers)
+                    .Include(c => c.Messages)
+                        .ThenInclude(m => m.MessageStatuses)
+                    .FirstOrDefaultAsync(c => c.ChatId == chatId);
 
-            _context.Messages.RemoveRange(chat.Messages);
+                if (chat == null)
+                    return NotFound(new { Message = "Чат не найден" });
 
-            _context.ChatMembers.RemoveRange(chat.ChatMembers);
+                var messages = chat.Messages;
+                var statuses = messages.SelectMany(m => m.MessageStatuses).ToList();
 
-            _context.Chats.Remove(chat);
+                _context.MessageStatuses.RemoveRange(statuses);
+                _context.Messages.RemoveRange(messages);
+                _context.ChatMembers.RemoveRange(chat.ChatMembers);
+                _context.Chats.Remove(chat);
 
-            await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync(); // Подтверждаем все изменения
 
-            var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
-            await hubContext.Clients.Users(chat.ChatMembers.Select(cm => cm.UserId.ToString()).ToList()).SendAsync("NotifyUpdateChatList");
+                // После успешного удаления — уведомляем пользователей
+                var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+                await hubContext.Clients.Users(chat.ChatMembers.Select(cm => cm.UserId.ToString()).ToList())
+                    .SendAsync("NotifyUpdateChatList");
 
-            return Ok(new { Message = "Чат успешно удален" });
+                return Ok(new { Message = "Чат успешно удалён" });
+            }
+            catch (Exception ex)
+            {
+                // Если что-то пошло не так — откатываем все изменения
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { Message = "Ошибка при удалении чата", Error = ex.Message });
+            }
         }
+
 
         [HttpPost("registration")]
         public async Task<IActionResult> Registration([FromBody] User user)
