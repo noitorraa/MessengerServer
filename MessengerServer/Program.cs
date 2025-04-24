@@ -27,17 +27,18 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IAmazonS3>(provider =>
 {
     var config = provider.GetRequiredService<IConfiguration>();
+    var awsConfig = new AmazonS3Config
+    {
+        ServiceURL = config["SwiftConfig:ServiceURL"],
+        ForcePathStyle = true,      // обязательно для S3-совместимых хранилищ
+        SignatureVersion = "4"      // если требуется
+    };
     return new AmazonS3Client(
-        new BasicAWSCredentials(
-            config["SwiftConfig:AccessKey"],
-            config["SwiftConfig:SecretKey"]),
-        new AmazonS3Config
-        {
-            ServiceURL = config["SwiftConfig:ServiceURL"],
-            ForcePathStyle = true,  // Обязательно для S3-совместимых хранилищ
-            SignatureVersion = "4"  // Используйте v4 для Timeweb
-        });
+        config["SwiftConfig:AccessKey"],
+        config["SwiftConfig:SecretKey"],
+        awsConfig);
 });
+
 
 
 
