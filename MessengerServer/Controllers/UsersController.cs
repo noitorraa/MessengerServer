@@ -18,6 +18,9 @@ using Amazon.DynamoDBv2.Model;
 using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using System.Numerics;
+using System;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using File = MessengerServer.Models.File;
 
 namespace MessengerServer.Controllers
 {
@@ -25,14 +28,16 @@ namespace MessengerServer.Controllers
     [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
+        private readonly IAmazonS3 _s3;
+        private readonly ILogger<UsersController> _logger;
+        private readonly string _bucket;
+        private readonly DefaultDbContext _db;
+        private readonly string _publicUrl;
+        private const long MAX_FILE_SIZE = 10_000_000;
         private readonly IWebHostEnvironment _env;
         private readonly DefaultDbContext _context;
         private readonly IServiceProvider _serviceProvider;
         private readonly Timer _cleanupTimer;
-
-        // Хранилище кодов для сброса пароля (существует ранее)
-        //private static readonly ConcurrentDictionary<string, string> _smsCodes = new();
-        //private static readonly ConcurrentDictionary<string, int> _retryCount = new();
         
         // Хранилище для кодов сброса паролей
         private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
@@ -47,12 +52,21 @@ namespace MessengerServer.Controllers
         private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
 
 
-        public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env)
+        public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env, IAmazonS3 s3,
+        IConfiguration cfg,
+        ILogger<UsersController> logger,
+        DefaultDbContext db)
         {
+            _s3 = s3;
+            _logger = logger;
+            _db = db;
+            _bucket = cfg["SwiftConfig:BucketName"];
+            _publicUrl = cfg["SwiftConfig:PublicUrl"];
             _env = env;
             _context = context;
             _serviceProvider = serviceProvider;
             _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+
         }
 
         private async void CleanupExpiredData(object state)
@@ -441,89 +455,77 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("upload/{chatId}/{userId}")]
-        public async Task<IActionResult> UploadFile(
-        int chatId,
-        int userId,
-        [ValidateFile(allowedExtensions: new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".mp4", ".mp3" },
-                     maxSize: 50 * 1024 * 1024)] IFormFile file,
-        [FromServices] IAmazonS3 s3Client,
-        [FromServices] IConfiguration config,
-        [FromServices] ILogger<UsersController> logger)
+        [RequestSizeLimit(MAX_FILE_SIZE)]
+        [RequestFormLimits(MultipartBodyLengthLimit = MAX_FILE_SIZE)]
+        public async Task<IActionResult> UploadFile([FromRoute] int chatId, [FromRoute] int userId, IFormFile file)
         {
-            using var scope = logger.BeginScope("Upload:{ChatId}:{UserId}", chatId, userId);
+            if (file.Length == 0 || file.Length > MAX_FILE_SIZE)
+                return BadRequest("Неверный размер файла"); 
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowed = new[] { ".jpg", ".png", ".pdf", ".docx" };
+            if (string.IsNullOrEmpty(ext) || !allowed.Contains(ext))
+                return BadRequest("Неподдерживаемое расширение"); 
+
+            // 2) Генерируем ключ и загружаем в S3
+            var key = $"{Guid.NewGuid()}{ext}";
             try
             {
-                var (bucketName, publicUrl) = (config["SwiftConfig:BucketName"], config["SwiftConfig:PublicUrl"]);
-                var objectKey = $"chat_{chatId}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-                var fileUrl = $"{publicUrl.TrimEnd('/')}/{bucketName}/{objectKey}";
-
-                using var memoryStream = new MemoryStream();
-                await file.CopyToAsync(memoryStream);
-                memoryStream.Position = 0; // Сброс позиции
-
-                var putRequest = new PutObjectRequest
+                using var ms = file.OpenReadStream();
+                var putReq = new PutObjectRequest
                 {
-                    BucketName = bucketName,
-                    Key = objectKey,
-                    InputStream = memoryStream,
-                    ContentType = file.ContentType,
-                    AutoCloseStream = false
+                    BucketName = _bucket,
+                    Key = key,
+                    InputStream = ms,
+                    ContentType = file.ContentType
                 };
+                await _s3.PutObjectAsync(putReq);
 
-                // Однократная загрузка
-                await s3Client.PutObjectAsync(putRequest);
-
-                // Сохранение в БД
-                var dbFile = new Models.File
+                // 3) Сохраняем метаданные в БД
+                var fileRecord = new File
                 {
-                    FileUrl = fileUrl,
+                    FileUrl = $"{_publicUrl}/{_bucket}/{key}",
                     FileType = file.ContentType,
-                    Size = file.Length
+                    Size = file.Length,
+                    CreatedAt = DateTime.UtcNow
                 };
+                _db.Files.Add(fileRecord);
+                await _db.SaveChangesAsync();
 
-                await using var transaction = await _context.Database.BeginTransactionAsync();
-                _context.Files.Add(dbFile);
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                logger.LogInformation("File uploaded successfully. ID: "+dbFile.FileId);
-                return Ok(new { dbFile.FileId, dbFile.FileUrl, dbFile.FileType });
-            }
-            catch (AmazonS3Exception ex)
-            {
-                logger.LogError("S3 Error: "+ ex.ErrorCode + " - "+ex.Message+"");
-                return StatusCode(500, "Storage error");
+                return Ok(new { fileId = fileRecord.FileId, url = fileRecord.FileUrl });
             }
             catch (Exception ex)
             {
-                logger.LogError("Critical error: "+ex.Message);
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "Ошибка загрузки файла");
+                // при необходимости: удалить объект из S3
+                return StatusCode(500, "Внутренняя ошибка сервера");
             }
         }
 
 
         [HttpGet("{fileId}")]
-        public async Task<IActionResult> GetFile(
-        int fileId,
-        [FromServices] IAmazonS3 s3Client,
-        [FromServices] ILogger<UsersController> logger)
+        public async Task<IActionResult> GetFile(int fileId)
         {
+            var fileRec = await _db.Files.FindAsync(fileId);
+            if (fileRec == null) return NotFound();
+
             try
             {
-                var file = await _context.Files
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(f => f.FileId == fileId);
-
-                return file == null
-                    ? NotFound()
-                    : RedirectPreserveMethod(file.FileUrl);
+                var getReq = new GetObjectRequest
+                {
+                    BucketName = _bucket,
+                    Key = new Uri(fileRec.FileUrl).Segments.Last()
+                };
+                using var response = await _s3.GetObjectAsync(getReq);
+                return File(response.ResponseStream, response.Headers.ContentType, fileRec.FileUrl);
             }
             catch (Exception ex)
             {
-                logger.LogError("File error: {Message}", ex.Message);
-                return StatusCode(500);
+                _logger.LogError(ex, "Ошибка получения файла");
+                return StatusCode(500, "Не удалось получить файл");
             }
         }
+
 
         public class ValidateFileAttribute : Attribute, IParameterModelConvention
         {

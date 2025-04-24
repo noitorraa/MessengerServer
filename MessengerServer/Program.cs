@@ -26,31 +26,27 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<IAmazonS3>(provider =>
 {
-    var config = provider.GetRequiredService<IConfiguration>();
-    var awsConfig = new AmazonS3Config
+    var cfg = provider.GetRequiredService<IConfiguration>();
+    var s3cfg = new AmazonS3Config
     {
-        ServiceURL = config["SwiftConfig:ServiceURL"],
-        ForcePathStyle = true,      // обязательно для S3-совместимых хранилищ
-        SignatureVersion = "4"      // если требуется
+        ServiceURL = cfg["SwiftConfig:ServiceURL"],
+        ForcePathStyle = true,
+        SignatureVersion = "4"
     };
     return new AmazonS3Client(
-        config["SwiftConfig:AccessKey"],
-        config["SwiftConfig:SecretKey"],
-        awsConfig);
+        cfg["SwiftConfig:AccessKey"],
+        cfg["SwiftConfig:SecretKey"],
+        s3cfg);
 });
-
-
-
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowAnyOrigin();
-    });
+    options.AddPolicy("AllowAll", p => p
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowAnyOrigin());
 });
+
 
 
 builder.Services.AddDbContext<DefaultDbContext>(options =>
