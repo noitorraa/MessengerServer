@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using Pomelo.EntityFrameworkCore.MySql.Scaffolding.Internal;
 
-namespace MessengerServer.Models;
+namespace MessengerServer.Model;
 
 public partial class DefaultDbContext : DbContext
 {
@@ -42,18 +43,23 @@ public partial class DefaultDbContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-            => optionsBuilder.UseMySql(
-                "Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;",
-                ServerVersion.AutoDetect("Server=213.171.4.203;Port=3306;Database=default_db;User Id=gen_user;Password=qZf+X=zK}#Wr7h;")
-            );
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+        => optionsBuilder.UseMySql("server=213.171.4.203;port=3306;database=default_db;user id=gen_user;password=\"qZf+X=zK}#Wr7h\"", Microsoft.EntityFrameworkCore.ServerVersion.Parse("8.0.22-mysql"));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder
+            .UseCollation("utf8mb4_0900_ai_ci")
+            .HasCharSet("utf8mb4");
+
         modelBuilder.Entity<Chat>(entity =>
         {
             entity.HasKey(e => e.ChatId).HasName("PRIMARY");
 
-            entity.ToTable("chats");
+            entity
+                .ToTable("chats")
+                .HasCharSet("utf8")
+                .UseCollation("utf8_general_ci");
 
             entity.Property(e => e.ChatId).HasColumnName("chat_id");
             entity.Property(e => e.ChatName)
@@ -69,7 +75,10 @@ public partial class DefaultDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PRIMARY");
 
-            entity.ToTable("chat_members");
+            entity
+                .ToTable("chat_members")
+                .HasCharSet("utf8")
+                .UseCollation("utf8_general_ci");
 
             entity.HasIndex(e => e.ChatId, "FK_chat_members_chats");
 
@@ -94,33 +103,26 @@ public partial class DefaultDbContext : DbContext
         {
             entity.HasKey(e => e.FileId).HasName("PRIMARY");
 
-            entity.ToTable("files");
-
-            entity.Property(e => e.FileId).HasColumnName("file_id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .HasColumnType("datetime")
-                .HasColumnName("created_at");
-            entity.Property(e => e.FileType)
-                .HasMaxLength(50)
-                .HasColumnName("file_type");
-            entity.Property(e => e.FileUrl)
-                .HasMaxLength(255)
-                .HasColumnName("file_url");
-            entity.Property(e => e.Size).HasColumnName("size");
+            entity.Property(e => e.FileId).ValueGeneratedNever();
+            entity.Property(e => e.FileData).HasColumnType("MEDIUMBLOB");
+            entity.Property(e => e.FileName).HasColumnType("text");
+            entity.Property(e => e.FileType).HasColumnType("text");
         });
 
         modelBuilder.Entity<Message>(entity =>
         {
             entity.HasKey(e => e.MessageId).HasName("PRIMARY");
 
-            entity.ToTable("messages");
+            entity
+                .ToTable("messages")
+                .HasCharSet("utf8")
+                .UseCollation("utf8_general_ci");
 
             entity.HasIndex(e => e.ChatId, "FK_messages_chats");
 
-            entity.HasIndex(e => e.FileId, "FK_messages_files");
-
             entity.HasIndex(e => e.SenderId, "FK_messages_users");
+
+            entity.HasIndex(e => e.FileId, "FileId");
 
             entity.Property(e => e.MessageId).HasColumnName("message_id");
             entity.Property(e => e.ChatId).HasColumnName("chat_id");
@@ -131,7 +133,6 @@ public partial class DefaultDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
-            entity.Property(e => e.FileId).HasColumnName("file_id");
             entity.Property(e => e.SenderId).HasColumnName("sender_id");
 
             entity.HasOne(d => d.Chat).WithMany(p => p.Messages)
@@ -140,8 +141,7 @@ public partial class DefaultDbContext : DbContext
 
             entity.HasOne(d => d.File).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.FileId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_messages_files");
+                .HasConstraintName("messages_ibfk_1");
 
             entity.HasOne(d => d.Sender).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.SenderId)
@@ -152,11 +152,14 @@ public partial class DefaultDbContext : DbContext
         {
             entity.HasKey(e => e.StatusId).HasName("PRIMARY");
 
-            entity.ToTable("message_statuses");
-
-            entity.HasIndex(e => e.MessageId, "FK_message_statuses_messages");
+            entity
+                .ToTable("message_statuses")
+                .HasCharSet("utf8")
+                .UseCollation("utf8_general_ci");
 
             entity.HasIndex(e => e.UserId, "FK_message_statuses_users");
+
+            entity.HasIndex(e => e.MessageId, "message_id");
 
             entity.Property(e => e.StatusId).HasColumnName("status_id");
             entity.Property(e => e.MessageId).HasColumnName("message_id");
@@ -169,7 +172,8 @@ public partial class DefaultDbContext : DbContext
 
             entity.HasOne(d => d.Message).WithMany(p => p.MessageStatuses)
                 .HasForeignKey(d => d.MessageId)
-                .HasConstraintName("FK_message_statuses_messages");
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("message_statuses_ibfk_1");
 
             entity.HasOne(d => d.User).WithMany(p => p.MessageStatuses)
                 .HasForeignKey(d => d.UserId)
@@ -180,7 +184,10 @@ public partial class DefaultDbContext : DbContext
         {
             entity.HasKey(e => e.UserId).HasName("PRIMARY");
 
-            entity.ToTable("users");
+            entity
+                .ToTable("users")
+                .HasCharSet("utf8")
+                .UseCollation("utf8_general_ci");
 
             entity.HasIndex(e => e.Username, "username").IsUnique();
 
@@ -192,12 +199,12 @@ public partial class DefaultDbContext : DbContext
             entity.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");
+            entity.Property(e => e.PhoneNumber)
+                .HasColumnType("text")
+                .HasColumnName("phoneNumber");
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
                 .HasColumnName("username");
-            entity.Property(e => e.PhoneNumber)
-            .HasColumnType("text")
-            .IsRequired(false);
         });
 
         OnModelCreatingPartial(modelBuilder);

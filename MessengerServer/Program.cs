@@ -1,16 +1,11 @@
 using MessengerServer.Hubs;
-using MessengerServer.Models;
+using MessengerServer.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json.Serialization;
 using MessengerServer;
-using Amazon.S3;
-using Amazon.Runtime;
-using Microsoft.Extensions.FileProviders;
-using Amazon;
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
@@ -24,20 +19,6 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddSingleton<IAmazonS3>(provider =>
-{
-    var cfg = provider.GetRequiredService<IConfiguration>();
-    var s3cfg = new AmazonS3Config
-    {
-        ServiceURL = cfg["SwiftConfig:ServiceURL"],
-        ForcePathStyle = true,
-        SignatureVersion = "4"
-    };
-    return new AmazonS3Client(
-        cfg["SwiftConfig:AccessKey"],
-        cfg["SwiftConfig:SecretKey"],
-        s3cfg);
-});
 
 builder.Services.AddCors(options =>
 {
@@ -51,7 +32,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddDbContext<DefaultDbContext>(options =>
     options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"),
-    ServerVersion.Parse("8.0")));
+   ServerVersion.Parse("8.0")));
 
 List<User> users = DefaultDbContext.GetContext().Users.ToList();
 

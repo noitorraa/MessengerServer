@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace MessengerServer.Models;
+namespace MessengerServer.Model;
 
 public partial class Message
 {

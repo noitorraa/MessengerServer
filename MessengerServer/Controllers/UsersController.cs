@@ -1,26 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using MessengerServer.Models;
-using Org.BouncyCastle.Crypto.Generators;
-using Microsoft.Extensions.DependencyInjection;
-using MessengerServer.Hubs;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.AspNet.SignalR;
-using Org.BouncyCastle.Asn1.Ocsp;
 using Newtonsoft.Json;
-using System.Text.Json.Serialization;
-using Amazon.S3.Model;
-using Amazon.S3;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNet.SignalR.Hubs;
-using Amazon.DynamoDBv2.Model;
+using MessengerServer.Hubs;
+using MessengerServer.Model;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using System.Collections.Concurrent;
-using System.Numerics;
-using System;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using File = MessengerServer.Models.File;
 
 namespace MessengerServer.Controllers
 {
@@ -28,17 +15,11 @@ namespace MessengerServer.Controllers
     [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
-        private readonly IAmazonS3 _s3;
-        private readonly ILogger<UsersController> _logger;
-        private readonly string _bucket;
-        private readonly DefaultDbContext _db;
-        private readonly string _publicUrl;
         private const long MAX_FILE_SIZE = 10_000_000;
-        private readonly IWebHostEnvironment _env;
         private readonly DefaultDbContext _context;
         private readonly IServiceProvider _serviceProvider;
         private readonly Timer _cleanupTimer;
-        
+
         // Хранилище для кодов сброса паролей
         private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
         private static readonly ConcurrentDictionary<string, int> _smsResetRetryCount = new();
@@ -52,19 +33,9 @@ namespace MessengerServer.Controllers
         private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
 
 
-        public UsersController(DefaultDbContext context, IServiceProvider serviceProvider, IWebHostEnvironment env, IAmazonS3 s3,
-        IConfiguration cfg,
-        ILogger<UsersController> logger,
-        DefaultDbContext db)
+        public UsersController(DefaultDbContext context, DefaultDbContext db)
         {
-            _s3 = s3;
-            _logger = logger;
-            _db = db;
-            _bucket = cfg["SwiftConfig:BucketName"];
-            _publicUrl = cfg["SwiftConfig:PublicUrl"];
-            _env = env;
             _context = context;
-            _serviceProvider = serviceProvider;
             _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
 
         }
@@ -173,7 +144,7 @@ namespace MessengerServer.Controllers
             return Ok(chats);
         }
 
-        [HttpGet("chats/{chatId}/{userId}/messages")]
+        [HttpGet("chats/{chatId}/{userId}/messages")] // Изменить
         public async Task<IActionResult> GetMessages(int userId, int chatId)
         {
             // Получаем ID второго участника чата
@@ -183,34 +154,37 @@ namespace MessengerServer.Controllers
                 .FirstOrDefaultAsync();
 
             var messages = await _context.Messages
-                .Where(m => m.ChatId == chatId)
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new
-                {
-                    Message = m,
-                    StatusForCurrentUser = m.MessageStatuses
-                        .Where(ms => ms.UserId == userId)
-                        .Select(ms => ms.Status)
-                        .FirstOrDefault(),
-                    StatusForRecipient = m.MessageStatuses
-                        .Where(ms => ms.UserId == otherUserId)
-                        .Select(ms => ms.Status)
-                        .FirstOrDefault()
-                })
-                .Select(x => new MessageDto
-                {
-                    MessageId = x.Message.MessageId,
-                    Content = x.Message.Content,
-                    UserID = (int)x.Message.SenderId,
-                    CreatedAt = (DateTime)x.Message.CreatedAt,
-                    FileId = x.Message.FileId,
-                    FileType = x.Message.File != null ? x.Message.File.FileType : null,
-                    FileUrl = x.Message.File != null ? x.Message.File.FileUrl : null,
-                    Status = x.Message.SenderId == userId
-                        ? x.StatusForRecipient // Для своих сообщений берем статус получателя
-                        : x.StatusForCurrentUser // Для чужих сообщений берем свой статус
-                })
-                .ToListAsync();
+            .Where(m => m.ChatId == chatId)
+            .Include(m => m.File)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new
+            {
+                Message = m,
+                FileInfo = m.File,
+                // Исправленные строки:
+                StatusForCurrentUser = m.MessageStatuses
+                    .Where(ms => ms.UserId == userId)
+                    .Select(ms => (int?)ms.Status)
+                    .FirstOrDefault(),
+                StatusForRecipient = m.MessageStatuses
+                    .Where(ms => ms.UserId == otherUserId)
+                    .Select(ms => (int?)ms.Status)
+                    .FirstOrDefault()
+            })
+            .Select(x => new MessageDto
+            {
+                MessageId = x.Message.MessageId,
+                Content = x.Message.Content,
+                UserID = (int)x.Message.SenderId,
+                CreatedAt = (DateTime)x.Message.CreatedAt,
+                FileId = x.Message.FileId,
+                FileName = x.FileInfo != null ? x.FileInfo.FileName : null,
+                FileType = x.FileInfo != null ? x.FileInfo.FileType : null,
+                Status = x.Message.SenderId == userId
+                    ? x.StatusForRecipient ?? 0
+                    : x.StatusForCurrentUser ?? 0
+            })
+    .ToListAsync();
 
             return Ok(messages);
         }
@@ -219,33 +193,37 @@ namespace MessengerServer.Controllers
         [HttpDelete("chats/{chatId}")]
         public async Task<IActionResult> DeleteChat(int chatId)
         {
-            // Начинаем транзакцию
             await using var transaction = await _context.Database.BeginTransactionAsync();
-
             try
             {
                 var chat = await _context.Chats
                     .Include(c => c.ChatMembers)
                     .Include(c => c.Messages)
                         .ThenInclude(m => m.MessageStatuses)
+                    .Include(c => c.Messages) // Добавлено: подгрузка файлов
+                        .ThenInclude(m => m.File)
                     .FirstOrDefaultAsync(c => c.ChatId == chatId);
 
                 if (chat == null)
                     return NotFound(new { Message = "Чат не найден" });
 
-                var messages = chat.Messages;
-                var statuses = messages.SelectMany(m => m.MessageStatuses).ToList();
+                // Удаляем файлы, связанные с сообщениями
+                var filesToDelete = chat.Messages
+                    .Where(m => m.File != null)
+                    .Select(m => m.File)
+                    .ToList();
 
-                _context.MessageStatuses.RemoveRange(statuses);
-                _context.Messages.RemoveRange(messages);
+                _context.Files.RemoveRange(filesToDelete);
+                _context.MessageStatuses.RemoveRange(chat.Messages.SelectMany(m => m.MessageStatuses));
+                _context.Messages.RemoveRange(chat.Messages);
                 _context.ChatMembers.RemoveRange(chat.ChatMembers);
                 _context.Chats.Remove(chat);
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync(); // Подтверждаем все изменения
+                await transaction.CommitAsync();
 
-                // После успешного удаления — уведомляем пользователей
-                var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
+                // Уведомление через SignalR
+                var hubContext = _serviceProvider.GetRequiredService<IHubContext<ChatHub>>();
                 await hubContext.Clients.Users(chat.ChatMembers.Select(cm => cm.UserId.ToString()).ToList())
                     .SendAsync("NotifyUpdateChatList");
 
@@ -253,7 +231,6 @@ namespace MessengerServer.Controllers
             }
             catch (Exception ex)
             {
-                // Если что-то пошло не так — откатываем все изменения
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { Message = "Ошибка при удалении чата", Error = ex.Message });
             }
@@ -457,73 +434,61 @@ namespace MessengerServer.Controllers
         [HttpPost("upload/{chatId}/{userId}")]
         [RequestSizeLimit(MAX_FILE_SIZE)]
         [RequestFormLimits(MultipartBodyLengthLimit = MAX_FILE_SIZE)]
-        public async Task<IActionResult> UploadFile([FromRoute] int chatId, [FromRoute] int userId, IFormFile file)
+        public async Task<IActionResult> UploadFile(
+    [FromRoute] int chatId,
+    [FromRoute] int userId,
+    IFormFile file)
         {
-            if (file.Length == 0 || file.Length > MAX_FILE_SIZE)
-                return BadRequest("Неверный размер файла"); 
+            if (file == null || file.Length == 0)
+                return BadRequest("Файл не загружен");
 
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var allowed = new[] { ".jpg", ".png", ".pdf", ".docx" };
-            if (string.IsNullOrEmpty(ext) || !allowed.Contains(ext))
-                return BadRequest("Неподдерживаемое расширение"); 
+            // Проверка размера файла (для MEDIUMBLOB - 16 МБ)
+            if (file.Length > 16 * 1024 * 1024)
+                return BadRequest("Максимальный размер файла: 16 МБ");
 
-            // 2) Генерируем ключ и загружаем в S3
-            var key = $"{Guid.NewGuid()}{ext}";
-            try
+            using var memoryStream = new MemoryStream();
+            await file.CopyToAsync(memoryStream);
+
+            // Создаем запись о файле
+            var fileEntity = new Model.File
             {
-                using var ms = file.OpenReadStream();
-                var putReq = new PutObjectRequest
-                {
-                    BucketName = _bucket,
-                    Key = key,
-                    InputStream = ms,
-                    ContentType = file.ContentType
-                };
-                await _s3.PutObjectAsync(putReq);
+                FileName = file.FileName,
+                FileType = file.ContentType,
+                FileData = memoryStream.ToArray(),
+                CreatedAt = DateTime.UtcNow
+            };
 
-                // 3) Сохраняем метаданные в БД
-                var fileRecord = new File
-                {
-                    FileUrl = $"{_publicUrl}/{_bucket}/{key}",
-                    FileType = file.ContentType,
-                    Size = file.Length,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _db.Files.Add(fileRecord);
-                await _db.SaveChangesAsync();
+            _context.Files.Add(fileEntity);
+            await _context.SaveChangesAsync(); // Сохраняем файл, чтобы получить FileId
 
-                return Ok(new { fileId = fileRecord.FileId, url = fileRecord.FileUrl });
-            }
-            catch (Exception ex)
+            // Создаем сообщение с привязкой к файлу
+            var message = new Message
             {
-                _logger.LogError(ex, "Ошибка загрузки файла");
-                // при необходимости: удалить объект из S3
-                return StatusCode(500, "Внутренняя ошибка сервера");
-            }
+                ChatId = chatId,
+                SenderId = userId,
+                Content = "Файл",
+                FileId = fileEntity.FileId, // Устанавливаем связь
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Messages.Add(message);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { FileId = fileEntity.FileId });
         }
 
 
         [HttpGet("{fileId}")]
         public async Task<IActionResult> GetFile(int fileId)
         {
-            var fileRec = await _db.Files.FindAsync(fileId);
-            if (fileRec == null) return NotFound();
+            var file = await _context.Files.FindAsync(fileId);
+            if (file == null)
+                return NotFound();
 
-            try
-            {
-                var getReq = new GetObjectRequest
-                {
-                    BucketName = _bucket,
-                    Key = new Uri(fileRec.FileUrl).Segments.Last()
-                };
-                using var response = await _s3.GetObjectAsync(getReq);
-                return File(response.ResponseStream, response.Headers.ContentType, fileRec.FileUrl);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка получения файла");
-                return StatusCode(500, "Не удалось получить файл");
-            }
+            return File(
+                file.FileData,
+                file.FileType,
+                file.FileName);
         }
 
 
@@ -593,7 +558,6 @@ namespace MessengerServer.Controllers
             public string NewPassword { get; set; }
         }
 
-        // В UsersController.cs
         public class MessageDto
         {
             [JsonProperty("messageId")]
@@ -608,15 +572,16 @@ namespace MessengerServer.Controllers
             [JsonProperty("createdAt")]
             public DateTime CreatedAt { get; set; }
 
-            // Новые поля для файлов
+            // Обновленные поля для файлов
             [JsonProperty("fileId")]
             public int? FileId { get; set; }
 
-            [JsonProperty("fileType")]
-            public string? FileType { get; set; }
+            [JsonProperty("fileName")]
+            public string FileName { get; set; } // Новое поле
 
-            [JsonProperty("fileUrl")]
-            public string? FileUrl { get; set; }
+            [JsonProperty("fileType")]
+            public string FileType { get; set; }
+
             [JsonProperty("status")]
             public int Status { get; set; }
         }
