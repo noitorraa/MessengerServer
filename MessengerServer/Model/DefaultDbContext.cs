@@ -1,33 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pomelo.EntityFrameworkCore.MySql.Scaffolding.Internal;
 
 namespace MessengerServer.Model;
 
 public partial class DefaultDbContext : DbContext
 {
-    public DefaultDbContext()
+    private readonly IEncryptionService _encryptionService;
+    public DefaultDbContext(DbContextOptions<DefaultDbContext> options,
+                            IEncryptionService encryptionService): base(options)
     {
+        _encryptionService = encryptionService;
     }
 
     public DefaultDbContext(DbContextOptions<DefaultDbContext> options)
         : base(options)
     {
-    }
-
-    public static DefaultDbContext GetContext()
-    {
-        DefaultDbContext context = new DefaultDbContext();
-        if (context == null)
-        {
-            context = new DefaultDbContext();
-            return context;
-        }
-        else
-        {
-            return context;
-        }
     }
 
     public virtual DbSet<Chat> Chats { get; set; }
@@ -48,6 +38,22 @@ public partial class DefaultDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var encryptConverter = new ValueConverter<string, string>(
+            plain => _encryptionService.Encrypt(plain),
+            cipher => _encryptionService.Decrypt(cipher)
+        );
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var props = entityType.ClrType.GetProperties()
+                           .Where(p => p.PropertyType == typeof(string));
+            foreach (var prop in props)
+            {
+                modelBuilder
+                    .Entity(entityType.ClrType)
+                    .Property(prop.Name)
+                    .HasConversion(encryptConverter);
+            }
+        }
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")
             .HasCharSet("utf8mb4");

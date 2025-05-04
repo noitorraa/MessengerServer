@@ -33,14 +33,15 @@ namespace MessengerServer.Controllers
         private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
 
 
-        public UsersController(DefaultDbContext context, DefaultDbContext db)
+        public UsersController(DefaultDbContext context, IServiceProvider serviceProvider)
         {
             _context = context;
+            _serviceProvider = serviceProvider;
             _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
 
         }
 
-        private async void CleanupExpiredData(object state)
+        private async void CleanupExpiredData(object? state)
         {
             // Очистка просроченных кодов для регистрации
             var expired = _pendingVerifications
@@ -137,7 +138,7 @@ namespace MessengerServer.Controllers
                         UserId = cm.User.UserId,
                         Username = cm.User.Username
                     }).ToList(),
-                    CreatedAt = (DateTime)c.CreatedAt
+                    CreatedAt = c.CreatedAt ?? DateTime.MinValue
                 })
                 .ToListAsync();
 
@@ -175,8 +176,8 @@ namespace MessengerServer.Controllers
             {
                 MessageId = x.Message.MessageId,
                 Content = x.Message.Content,
-                UserID = (int)x.Message.SenderId,
-                CreatedAt = (DateTime)x.Message.CreatedAt,
+                UserID = x.Message.SenderId ?? 0,
+                CreatedAt = x.Message.CreatedAt ?? DateTime.MinValue,
                 FileId = x.Message.FileId,
                 FileName = x.FileInfo != null ? x.FileInfo.FileName : null,
                 FileType = x.FileInfo != null ? x.FileInfo.FileType : null,
@@ -213,7 +214,7 @@ namespace MessengerServer.Controllers
                     .Select(m => m.File)
                     .ToList();
 
-                _context.Files.RemoveRange(filesToDelete);
+                _context.Files.RemoveRange(filesToDelete.Where(file => file != null)!);
                 _context.MessageStatuses.RemoveRange(chat.Messages.SelectMany(m => m.MessageStatuses));
                 _context.Messages.RemoveRange(chat.Messages);
                 _context.ChatMembers.RemoveRange(chat.ChatMembers);
@@ -366,6 +367,7 @@ namespace MessengerServer.Controllers
             var expiration = DateTime.UtcNow.AddMinutes(5);
             _smsResetCodes[phone] = (code, expiration);
 
+            Console.WriteLine($"Reset Code: {code}, phone: {phone}");
             // Здесь необходимо вызвать реальный API для отправки SMS, например:
             // await _smsService.SendAsync(phone, $"Ваш код для сброса пароля: {code}");
 
@@ -553,9 +555,9 @@ namespace MessengerServer.Controllers
 
         public class ResetModel
         {
-            public string Phone { get; set; }
-            public string Code { get; set; }
-            public string NewPassword { get; set; }
+            public required string Phone { get; set; }
+            public string? Code { get; set; }
+            public string? NewPassword { get; set; }
         }
 
         public class MessageDto
@@ -564,7 +566,7 @@ namespace MessengerServer.Controllers
             public int MessageId { get; set; }
 
             [JsonProperty("content")]
-            public string Content { get; set; }
+            public string? Content { get; set; }
 
             [JsonProperty("userID")]
             public int UserID { get; set; }
@@ -577,10 +579,10 @@ namespace MessengerServer.Controllers
             public int? FileId { get; set; }
 
             [JsonProperty("fileName")]
-            public string FileName { get; set; } // Новое поле
+            public string? FileName { get; set; } // Новое поле
 
             [JsonProperty("fileType")]
-            public string FileType { get; set; }
+            public string? FileType { get; set; }
 
             [JsonProperty("status")]
             public int Status { get; set; }
@@ -589,20 +591,20 @@ namespace MessengerServer.Controllers
         public class ChatDto
         {
             public int ChatId { get; set; }
-            public List<UserDto> Members { get; set; }
+            public List<UserDto>? Members { get; set; }
             public DateTime CreatedAt { get; set; }
         }
 
         public class UserDto
         {
             public int UserId { get; set; }
-            public string Username { get; set; }
+            public string? Username { get; set; }
         }
 
         public class ChatCreationRequest
         {
-            public string ChatName { get; set; }
-            public List<int> UserIds { get; set; }
+            public string? ChatName { get; set; }
+            public List<int>? UserIds { get; set; }
         }
 
         public enum MessageStatusType

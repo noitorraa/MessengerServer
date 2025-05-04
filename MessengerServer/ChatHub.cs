@@ -45,8 +45,8 @@ namespace MessengerServer.Hubs
                 UserID = userId,
                 CreatedAt = (DateTime)newMessage.CreatedAt,
                 FileId = newMessage.FileId,
-                FileName = newMessage.File?.FileName, // Важно!
-                FileType = newMessage.File?.FileType
+                FileName = newMessage.File?.FileName ?? string.Empty, // Важно!
+                FileType = newMessage.File?.FileType ?? string.Empty
             };
 
             // Обновляем статусы и отправляем сообщение
