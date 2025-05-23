@@ -42,18 +42,7 @@ public partial class DefaultDbContext : DbContext
             plain => _encryptionService.Encrypt(plain),
             cipher => _encryptionService.Decrypt(cipher)
         );
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-        {
-            var props = entityType.ClrType.GetProperties()
-                           .Where(p => p.PropertyType == typeof(string));
-            foreach (var prop in props)
-            {
-                modelBuilder
-                    .Entity(entityType.ClrType)
-                    .Property(prop.Name)
-                    .HasConversion(encryptConverter);
-            }
-        }
+        
         modelBuilder
             .UseCollation("utf8mb4_0900_ai_ci")
             .HasCharSet("utf8mb4");
@@ -134,8 +123,8 @@ public partial class DefaultDbContext : DbContext
             entity.Property(e => e.ChatId).HasColumnName("chat_id");
             entity.Property(e => e.Content)
                 .HasColumnType("text")
-                .HasColumnName("content");
-            entity.Property(e => e.CreatedAt)
+                .HasColumnName("content").HasConversion(encryptConverter);
+            entity.Property(e => e.CreatedAt)   
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
@@ -207,7 +196,7 @@ public partial class DefaultDbContext : DbContext
                 .HasColumnName("password_hash");
             entity.Property(e => e.PhoneNumber)
                 .HasColumnType("text")
-                .HasColumnName("phoneNumber");
+                .HasColumnName("phoneNumber").HasConversion(encryptConverter);
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
                 .HasColumnName("username");

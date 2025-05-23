@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using System.Net;
 using System.Text.Json.Serialization;
 using MessengerServer;
+using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 

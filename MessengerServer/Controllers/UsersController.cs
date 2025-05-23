@@ -336,8 +336,12 @@ namespace MessengerServer.Controllers
 
             // Отправляем уведомление через SignalR
             var hubContext = _serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<ChatHub>>();
-            await hubContext.Clients.Users(request.UserIds.Select(u => u.ToString()).ToList())
-                .SendAsync("NotifyUpdateChatList");
+            foreach (var id in request.UserIds)
+            {
+                await hubContext.Clients
+                    .Group($"user_{id}")
+                    .SendAsync("NotifyUpdateChatList");
+            }
 
             return Ok(chat);
         }
@@ -469,7 +473,7 @@ namespace MessengerServer.Controllers
                 ChatId = chatId,
                 SenderId = userId,
                 Content = "Файл",
-                FileId = fileEntity.FileId, // Устанавливаем связь
+                FileId = fileEntity.FileId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -525,7 +529,7 @@ namespace MessengerServer.Controllers
                 _maxSize = maxSize;
             }
 
-            public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+            public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next) // потом реализовать
             {
                 if (!context.ActionArguments.TryGetValue("file", out var fileObj) ||
                     !(fileObj is IFormFile file))

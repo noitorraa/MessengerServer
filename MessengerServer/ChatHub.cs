@@ -155,5 +155,17 @@ namespace MessengerServer.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{chatId}");
             Console.WriteLine($"Пользователь вошёл в чат: chat_{chatId}");
         }
+
+
+        /// <summary>
+    /// Клиент вызывает после StartAsync — 
+    /// кладём текущее соединение в группу user_{userId}
+    /// </summary>
+    public async Task RegisterUser(int userId)
+    {
+        var groupName = $"user_{userId}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        Console.WriteLine($"Connection {Context.ConnectionId} joined group {groupName}");
+    }
     }
 }
