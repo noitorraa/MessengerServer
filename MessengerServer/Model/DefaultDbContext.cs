@@ -124,11 +124,7 @@ public partial class DefaultDbContext : DbContext
             entity.Property(e => e.Content)
                 .HasColumnType("text")
                 .HasColumnName("content").HasConversion(encryptConverter);
-<<<<<<< HEAD
             entity.Property(e => e.CreatedAt)   
-=======
-            entity.Property(e => e.CreatedAt)
->>>>>>> df8e006148931543b96fc86870c08f3a145a80e0
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
