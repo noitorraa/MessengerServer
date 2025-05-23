@@ -7,6 +7,7 @@ using System.Net;
 using System.Text.Json.Serialization;
 using MessengerServer;
 using System.Security.Cryptography;
+using MessengerServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,13 @@ builder.Services.AddCors(opts =>
 
 // AES‑шифрование
 builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IVerificationService, VerificationService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ICleanupService, CleanupService>();
 
 // DbContext с MySQL
 builder.Services.AddDbContext<DefaultDbContext>(opts =>

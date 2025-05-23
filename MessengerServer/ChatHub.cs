@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using MessengerServer.Model;
 using static MessengerServer.Controllers.UsersController;
+using MessengerServer.Services;
 
 namespace MessengerServer.Hubs
 {
@@ -107,7 +108,7 @@ namespace MessengerServer.Hubs
         // Пометка сообщений как прочитанных
         public async Task MarkMessagesAsRead(int chatId, int userId)
         {
-            // 1) Выбираем все непрочитанные сообщения
+            // 1) Смотрим, какие сообщения ещё «не прочитаны»
             var unreadMessages = await _context.Messages
                 .Include(m => m.MessageStatuses)
                 .Where(m => m.ChatId == chatId
@@ -121,29 +122,53 @@ namespace MessengerServer.Hubs
 
             var now = DateTime.UtcNow;
             var readStatus = (int)MessageStatusType.Read;
+            var messageIds = unreadMessages.Select(m => m.MessageId).ToList();
 
-            // 2) Формируем список новых записей статусов
-            var newStatuses = unreadMessages.Select(m => new MessageStatus
+            // 2) Подгружаем уже существующие статусы из БД
+            var existingStatuses = await _context.MessageStatuses
+                .Where(ms => ms.UserId == userId && messageIds.Contains(ms.MessageId))
+                .ToListAsync();
+
+            var statusDtos = new List<StatusDto>();
+
+            foreach (var msg in unreadMessages)
             {
-                MessageId = m.MessageId,
-                UserId    = userId,
-                Status    = readStatus,
-                UpdatedAt = now
-            }).ToList();
+                var exist = existingStatuses.FirstOrDefault(ms => ms.MessageId == msg.MessageId);
+                if (exist != null)
+                {
+                    // 3a) Обновляем запись
+                    exist.Status = readStatus;
+                    exist.UpdatedAt = now;
+                }
+                else
+                {
+                    // 3b) Создаем новую
+                    var ms = new MessageStatus
+                    {
+                        MessageId = msg.MessageId,
+                        UserId = userId,
+                        Status = readStatus,
+                        UpdatedAt = now
+                    };
+                    _context.MessageStatuses.Add(ms);
+                    existingStatuses.Add(ms); // чтобы в будущем не дублировать
+                }
 
-            // 3) Сохраняем пачкой
-            _context.MessageStatuses.AddRange(newStatuses);
+                statusDtos.Add(new StatusDto
+                {
+                    MessageId = msg.MessageId,
+                    Status = readStatus
+                });
+            }
+
+            // 4) Сохраняем все изменения одним SaveChanges
             await _context.SaveChangesAsync();
 
-            // 4) Формируем пакет для клиента
-            var statusDtos = newStatuses
-                .Select(s => new StatusDto { MessageId = s.MessageId, Status = s.Status })
-                .ToList();
-
-            // 5) Пушим единственным сообщением всем участникам чата
+            // 5) Пушим единым пакетом
             await Clients.Group($"chat_{chatId}")
                 .SendAsync("BatchUpdateStatuses", statusDtos);
         }
+
 
 
         // Обновление статуса сообщения
@@ -187,3 +212,10 @@ namespace MessengerServer.Hubs
         }
     }
 }
+
+        public enum MessageStatusType
+        {
+            Sent = 0,       // Отправлено
+            Delivered = 1,  // Доставлено
+            Read = 2        // Прочитано
+        }
