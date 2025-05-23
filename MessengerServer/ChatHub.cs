@@ -158,14 +158,14 @@ namespace MessengerServer.Hubs
 
 
         /// <summary>
-    /// Клиент вызывает после StartAsync — 
-    /// кладём текущее соединение в группу user_{userId}
-    /// </summary>
-    public async Task RegisterUser(int userId)
-    {
-        var groupName = $"user_{userId}";
-        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
-        Console.WriteLine($"Connection {Context.ConnectionId} joined group {groupName}");
-    }
+        /// Клиент вызывает после StartAsync — 
+        /// кладём текущее соединение в группу user_{userId}
+        /// </summary>
+        public async Task RegisterUser(int userId)
+        {
+            var groupName = $"user_{userId}";
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+            Console.WriteLine($"Connection {Context.ConnectionId} joined group {groupName}");
+        }
     }
 }
