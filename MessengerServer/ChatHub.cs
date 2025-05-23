@@ -107,6 +107,7 @@ namespace MessengerServer.Hubs
         // Пометка сообщений как прочитанных
         public async Task MarkMessagesAsRead(int chatId, int userId)
         {
+            // 1) Выбираем все непрочитанные сообщения
             var unreadMessages = await _context.Messages
                 .Include(m => m.MessageStatuses)
                 .Where(m => m.ChatId == chatId
@@ -115,13 +116,35 @@ namespace MessengerServer.Hubs
                         || m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status < (int)MessageStatusType.Read)))
                 .ToListAsync();
 
-            foreach (var message in unreadMessages)
-            {
-                await UpdateMessageStatus(message.MessageId, userId, (int)MessageStatusType.Read);
-            }
+            if (!unreadMessages.Any())
+                return;
 
-            await Clients.Group($"chat_{chatId}").SendAsync("RefreshMessages");
+            var now = DateTime.UtcNow;
+            var readStatus = (int)MessageStatusType.Read;
+
+            // 2) Формируем список новых записей статусов
+            var newStatuses = unreadMessages.Select(m => new MessageStatus
+            {
+                MessageId = m.MessageId,
+                UserId    = userId,
+                Status    = readStatus,
+                UpdatedAt = now
+            }).ToList();
+
+            // 3) Сохраняем пачкой
+            _context.MessageStatuses.AddRange(newStatuses);
+            await _context.SaveChangesAsync();
+
+            // 4) Формируем пакет для клиента
+            var statusDtos = newStatuses
+                .Select(s => new StatusDto { MessageId = s.MessageId, Status = s.Status })
+                .ToList();
+
+            // 5) Пушим единственным сообщением всем участникам чата
+            await Clients.Group($"chat_{chatId}")
+                .SendAsync("BatchUpdateStatuses", statusDtos);
         }
+
 
         // Обновление статуса сообщения
         private async Task UpdateMessageStatus(int messageId, int userId, int status)
@@ -156,11 +179,6 @@ namespace MessengerServer.Hubs
             Console.WriteLine($"Пользователь вошёл в чат: chat_{chatId}");
         }
 
-
-        /// <summary>
-        /// Клиент вызывает после StartAsync — 
-        /// кладём текущее соединение в группу user_{userId}
-        /// </summary>
         public async Task RegisterUser(int userId)
         {
             var groupName = $"user_{userId}";

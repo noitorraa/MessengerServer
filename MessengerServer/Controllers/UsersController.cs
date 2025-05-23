@@ -592,6 +592,13 @@ namespace MessengerServer.Controllers
             public int Status { get; set; }
         }
 
+        public class StatusDto
+        {
+            public int MessageId { get; set; }
+            public int Status    { get; set; }
+        }
+
+
         public class ChatDto
         {
             public int ChatId { get; set; }
