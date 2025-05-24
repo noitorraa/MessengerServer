@@ -9,16 +9,18 @@ using MessengerServer.Services;
 
 namespace MessengerServer.Services
 {
-    public class UserService : IUserService // Почекать хэширование пароля
+    public class UserService : IUserService
     {
         private readonly DefaultDbContext _context;
+        private readonly ISmsService _smsService;
         private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
         private static readonly ConcurrentDictionary<string, int> _smsResetRetryCount = new();
         private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
 
-        public UserService(DefaultDbContext context)
+        public UserService(DefaultDbContext context, ISmsService smsService)
         {
             _context = context;
+            _smsService = smsService;
         }
 
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
@@ -56,10 +58,10 @@ namespace MessengerServer.Services
             return new OkObjectResult(new { Message = "User registered successfully." });
         }
 
-        public IActionResult SendResetCode(string phone)
+        public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-            var user = _context.Users.FirstOrDefault(u => u.PhoneNumber == phone);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone);
             if (user == null)
             {
                 return new NotFoundObjectResult("Пользователь не найден");
@@ -74,7 +76,10 @@ namespace MessengerServer.Services
             var code = new Random().Next(100000, 999999).ToString();
             var expiration = DateTime.UtcNow.AddMinutes(5);
             _smsResetCodes[phone] = (code, expiration);
-            Console.WriteLine($"Reset Code: {code}, phone: {phone}");
+
+            bool isSent = await _smsService.SendSmsAsync(phone, $"Ваш код сброса пароля: {code}");
+            if (!isSent)
+                return new ObjectResult("Не удалось отправить SMS") { StatusCode = 500 };
 
             return new OkObjectResult("Код отправлен");
         }
@@ -96,7 +101,7 @@ namespace MessengerServer.Services
             if (codeInfo.Expires < DateTime.UtcNow)
             {
                 _smsResetCodes.TryRemove(phone, out _);
-                return new BadRequestObjectResult("Срок действия кода истек");
+                return new BadRequestObjectResult("Срок действия кода истёк");
             }
 
             if (codeInfo.Code != model.Code)
@@ -104,10 +109,15 @@ namespace MessengerServer.Services
                 return new BadRequestObjectResult("Неверный код подтверждения");
             }
 
+            if (string.IsNullOrWhiteSpace(model.NewPassword) || model.NewPassword.Length < 8)
+            {
+                return new BadRequestObjectResult("Пароль должен быть не менее 8 символов");
+            }
+
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
             _smsResetCodes.TryRemove(phone, out _);
             await _context.SaveChangesAsync();
-            return new OkObjectResult("Пароль успешно изменен");
+            return new OkObjectResult("Пароль успешно изменён");
         }
 
         public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
@@ -134,12 +144,8 @@ namespace MessengerServer.Services
                 );
             return chat != null ? new OkObjectResult(chat) : new NotFoundResult();
         }
-
-        Task<IActionResult> IUserService.SendResetCode(string phone) // потом доделать
-        {
-            throw new NotImplementedException();
-        }
     }
+
     public interface IUserService
     {
         Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password);
@@ -149,5 +155,4 @@ namespace MessengerServer.Services
         Task<ActionResult<List<User>>> SearchUsersByLogin(string login);
         Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id);
     }
-
 }

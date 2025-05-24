@@ -9,6 +9,12 @@ namespace MessengerServer.Services
         private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _pendingVerifications = new();
         private static readonly ConcurrentDictionary<string, int> _verificationRetryCount = new();
         private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
+        private readonly ISmsService _smsService;
+
+        public VerificationService(ISmsService smsService)
+        {
+            _smsService = smsService;
+        }
 
         public IActionResult SendVerificationCode(string phone)
         {
@@ -27,7 +33,11 @@ namespace MessengerServer.Services
             var code = new Random().Next(100000, 999999).ToString();
             var expiration = DateTime.UtcNow.AddMinutes(5);
             _pendingVerifications[phone] = (code, expiration);
-            Console.WriteLine($"Code: {code}, phone: {phone}");
+
+            // Отправка SMS через Email-to-SMS
+            var isSent = _smsService.SendSmsAsync(phone, $"Ваш код подтверждения: {code}").Result;
+            if (!isSent)
+                return new ObjectResult("Не удалось отправить SMS") { StatusCode = 500 };
 
             return new OkObjectResult("Код отправлен");
         }

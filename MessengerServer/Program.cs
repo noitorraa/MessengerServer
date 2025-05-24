@@ -25,8 +25,8 @@ builder.Services.AddCors(opts =>
         .AllowAnyMethod()
         .AllowAnyOrigin()));
 
-// AES‑шифрование
 builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
+builder.Services.AddSingleton<ISmsService, EmailSmsService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVerificationService, VerificationService>();
 builder.Services.AddScoped<IChatService, ChatService>();
