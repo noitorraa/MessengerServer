@@ -21,8 +21,9 @@ namespace MessengerServer.Services
                 phone = Regex.Replace(phone ?? "", @"[^\d]", "");
                 var code = new Random().Next(100000,999999).ToString();
                 _codes[phone] = (code, DateTime.UtcNow.AddMinutes(5));
-                if (!await _sms.SendSmsAsync(phone, $"Ваш код: {code}"))
-                    return new ObjectResult("SMS send failed") { StatusCode = 500 };
+                //if (!await _sms.SendSmsAsync(phone, $"Ваш код: {code}"))
+                //    return new ObjectResult("SMS send failed") { StatusCode = 500 };
+                Console.WriteLine($"Phone = {phone}, code = {code}");
 
                 return new OkResult();
             }
