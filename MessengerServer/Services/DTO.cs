@@ -17,6 +17,12 @@ namespace MessengerServer.Services
         public string Phone { get; set; }
     }
 
+    public class VerifyCodeRequest
+    {
+        public string Phone { get; set; }
+        public string Code  { get; set; }
+    }
+
     public class UserDto
     {
         [Key]

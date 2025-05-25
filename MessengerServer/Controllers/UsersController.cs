@@ -53,9 +53,9 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("verify-code")]
-        public IActionResult VerifyCode(string phone, string code)
+        public IActionResult VerifyCode([FromBody] VerifyCodeRequest request)
         {
-            return _verificationService.VerifyCode(phone, code);
+            return _verificationService.VerifyCode(request.Phone, request.Code);
         }
 
         [HttpGet("chats/{userId}")]
@@ -100,13 +100,13 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("send-reset-code")]
-        public Task<IActionResult> SendResetCode(string phone)
+        public Task<IActionResult> SendResetCode([FromBody] PhoneRequest request)
         {
-            return _userService.SendResetCode(phone);
+            return _userService.SendResetCode(request.Phone);
         }
 
         [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword(ResetModel model)
+        public async Task<IActionResult> ResetPassword([FromBody] ResetModel model)
         {
             return await _userService.ResetPassword(model);
         }
