@@ -1,11 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using MessengerServer.Model;
-using BCrypt.Net;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using MessengerServer.Services;
 
 namespace MessengerServer.Services
 {
@@ -13,14 +10,20 @@ namespace MessengerServer.Services
     {
         private readonly DefaultDbContext _context;
         private readonly ISmsService _smsService;
-        private static readonly ConcurrentDictionary<string, (string Code, DateTime Expires)> _smsResetCodes = new();
+        private readonly IVerificationService _verification;
+        private readonly IResetCodeService _resetCodeService;
         private static readonly ConcurrentDictionary<string, int> _smsResetRetryCount = new();
-        private static readonly ConcurrentDictionary<string, bool> _verifiedPhones = new();
 
-        public UserService(DefaultDbContext context, ISmsService smsService)
+        public UserService(
+            DefaultDbContext context,
+            ISmsService smsService,
+            IVerificationService verificationService,
+            IResetCodeService resetCodeService)
         {
             _context = context;
             _smsService = smsService;
+            _verification = verificationService;
+            _resetCodeService = resetCodeService;
         }
 
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
@@ -35,26 +38,38 @@ namespace MessengerServer.Services
 
         public async Task<IActionResult> Registration([FromBody] User user)
         {
-            user.PhoneNumber = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
-            if (!_verifiedPhones.TryGetValue(user.PhoneNumber, out var verified) || !verified)
-            {
+            // 1. Очищаем номер от всех не-цифр:
+            var phone = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
+
+            // 2. Проверяем, что по этому номеру на сервере уже прошла успешная верификация SMS-кода:
+            if (!_verification.IsPhoneVerified(phone))
                 return new BadRequestObjectResult("Номер телефона не подтверждён");
-            }
-            _verifiedPhones.TryRemove(user.PhoneNumber, out _);
 
+            // 3. (Опционально) Снимаем метку «подтверждён»,
+            //    чтобы один и тот же код нельзя было использовать повторно:
+            _verification.ClearVerified(phone);
+
+            // 4. Проверяем, что логин (Username) не пустой:
+            if (string.IsNullOrWhiteSpace(user.Username))
+                return new BadRequestObjectResult("Username не может быть пустым");
+
+            // 5. Убеждаемся, что пользователь с таким Username ещё не зарегистрирован:
             if (await _context.Users.AnyAsync(u => u.Username == user.Username))
-            {
                 return new ConflictObjectResult("Username already exists.");
-            }
 
-            if (user.PhoneNumber.Length < 10 || user.PhoneNumber.Length > 15)
-            {
+            // 6. Проверяем длину номера:
+            if (phone.Length < 10 || phone.Length > 15)
                 return new BadRequestObjectResult("Неверный формат телефона");
-            }
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
+            // 7. Хешируем пароль (в user.PasswordHash на входе хранится «сырое» значение):
+            var rawPassword = user.PasswordHash;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rawPassword);
+            user.PhoneNumber  = phone;
+
+            // 8. Добавляем пользователя в базу:
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
+
             return new OkObjectResult(new { Message = "User registered successfully." });
         }
 
@@ -73,15 +88,7 @@ namespace MessengerServer.Services
                 return new BadRequestObjectResult("Слишком много попыток. Попробуйте позже.");
             }
 
-            var code = new Random().Next(100000, 999999).ToString();
-            var expiration = DateTime.UtcNow.AddMinutes(5);
-            _smsResetCodes[phone] = (code, expiration);
-
-            bool isSent = await _smsService.SendSmsAsync(phone, $"Ваш код сброса пароля: {code}");
-            if (!isSent)
-                return new ObjectResult("Не удалось отправить SMS") { StatusCode = 500 };
-
-            return new OkObjectResult("Код отправлен");
+            return await _resetCodeService.SendResetCodeAsync(phone);
         }
 
         public async Task<IActionResult> ResetPassword(ResetModel model)
@@ -93,20 +100,10 @@ namespace MessengerServer.Services
                 return new NotFoundObjectResult("Пользователь не найден");
             }
 
-            if (!_smsResetCodes.TryGetValue(phone, out var codeInfo))
+            var verifyResult = await _resetCodeService.VerifyResetCodeAsync(phone, model.Code);
+            if (verifyResult is not OkResult)
             {
-                return new BadRequestObjectResult("Код не найден или просрочен");
-            }
-
-            if (codeInfo.Expires < DateTime.UtcNow)
-            {
-                _smsResetCodes.TryRemove(phone, out _);
-                return new BadRequestObjectResult("Срок действия кода истёк");
-            }
-
-            if (codeInfo.Code != model.Code)
-            {
-                return new BadRequestObjectResult("Неверный код подтверждения");
+                return verifyResult;
             }
 
             if (string.IsNullOrWhiteSpace(model.NewPassword) || model.NewPassword.Length < 8)
@@ -115,7 +112,6 @@ namespace MessengerServer.Services
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
-            _smsResetCodes.TryRemove(phone, out _);
             await _context.SaveChangesAsync();
             return new OkObjectResult("Пароль успешно изменён");
         }

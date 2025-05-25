@@ -29,6 +29,7 @@ builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
 builder.Services.AddHttpClient<ISmsService, SmsaeroService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVerificationService, VerificationService>();
+builder.Services.AddScoped<IResetCodeService, ResetCodeService>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IFileService, FileService>();

@@ -49,13 +49,13 @@ namespace MessengerServer.Controllers
         [HttpPost("send-verification-code")]
         public async Task<IActionResult> SendVerificationCode([FromBody] PhoneRequest request)
         {
-            return await _verificationService.SendVerificationCode(request.Phone);
+            return await _verificationService.SendVerificationCodeAsync(request.Phone);
         }
 
         [HttpPost("verify-code")]
-        public IActionResult VerifyCode([FromBody] VerifyCodeRequest request)
+        public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request)
         {
-            return _verificationService.VerifyCode(request.Phone, request.Code);
+            return await _verificationService.VerifyCodeAsync(request.Phone, request.Code);
         }
 
         [HttpGet("chats/{userId}")]
@@ -83,7 +83,7 @@ namespace MessengerServer.Controllers
             {
                 return BadRequest(ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             }
-            
+
             return await _userService.Registration(user);
         }
 
@@ -100,9 +100,9 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("send-reset-code")]
-        public Task<IActionResult> SendResetCode([FromBody] PhoneRequest request)
+        public async Task<IActionResult> SendResetCode([FromBody] PhoneRequest request)
         {
-            return _userService.SendResetCode(request.Phone);
+            return await _userService.SendResetCode(request.Phone);
         }
 
         [HttpPost("reset-password")]
