@@ -19,37 +19,49 @@ namespace MessengerServer.Services
         {
             if (file == null || file.Length == 0)
                 return new BadRequestObjectResult("Файл не загружен");
-
             if (file.Length > 16 * 1024 * 1024)
                 return new BadRequestObjectResult("Максимальный размер файла: 16 МБ");
 
-            using var memoryStream = new MemoryStream();
+            await using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
 
-            var fileEntity = new Model.File
-            {
-                FileName = file.FileName,
-                FileType = file.ContentType,
-                FileData = memoryStream.ToArray(),
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            _context.Files.Add(fileEntity);
-            await _context.SaveChangesAsync();
+            // Начнём транзакцию
+            await using var tx = await _context.Database.BeginTransactionAsync();
 
-            var message = new Message
+            try
             {
-                ChatId = chatId,
-                SenderId = userId,
-                Content = "Файл",
-                FileId = fileEntity.FileId,
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            _context.Messages.Add(message);
-            await _context.SaveChangesAsync();
-            
-            return new OkObjectResult(new { FileId = fileEntity.FileId });
+                var fileEntity = new Model.File
+                {
+                    FileName = file.FileName,
+                    FileType = file.ContentType,
+                    FileData = memoryStream.ToArray(),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                var message = new Message
+                {
+                    ChatId = chatId,
+                    SenderId = userId,
+                    Content = "Файл",
+                    File = fileEntity,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.AddRange(fileEntity, message);
+
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new OkObjectResult(new { FileId = fileEntity.FileId });
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return new ObjectResult(new { error = ex.Message })
+                {
+                    StatusCode = 500
+                };
+            }
         }
 
         public async Task<IActionResult> GetFile(int fileId)
@@ -57,7 +69,7 @@ namespace MessengerServer.Services
             var file = await _context.Files.FindAsync(fileId);
             if (file == null)
                 return new NotFoundResult();
-            
+
             return new FileContentResult(file.FileData, file.FileType)
             {
                 FileDownloadName = file.FileName
