@@ -21,47 +21,51 @@ namespace MessengerServer.Services
             if (file.Length > 16 * 1024 * 1024)
                 return new BadRequestObjectResult("Максимальный размер файла: 16 МБ");
 
-            await using var memoryStream = new MemoryStream();
-            await file.CopyToAsync(memoryStream);
-            // Начнём транзакцию
-            await using var tx = await _context.Database.BeginTransactionAsync();
+            // Читаем данные в байты
+            byte[] fileBytes;
+            await using (var ms = new MemoryStream())
+            {
+                await file.CopyToAsync(ms);
+                fileBytes = ms.ToArray();
+            }
 
+            // Начинаем транзакцию
+            await using var tx = await _context.Database.BeginTransactionAsync();
             try
             {
+                // 1) Сохраняем сначала файл
                 var fileEntity = new Model.File
                 {
-                    FileName = file.FileName,
-                    FileType = file.ContentType,
-                    FileData = memoryStream.ToArray(),
+                    FileName  = file.FileName,
+                    FileType  = file.ContentType,
+                    FileData  = fileBytes,
                     CreatedAt = DateTime.UtcNow
                 };
-
                 _context.Files.Add(fileEntity);
+                await _context.SaveChangesAsync();
 
+                // 2) Сохраняем сообщение, используя реальный FileId
                 var message = new Message
                 {
-                    ChatId = chatId,
-                    SenderId = userId,
-                    Content = "Файл",
-                    FileId = fileEntity.FileId, // Use the saved FileId
+                    ChatId    = chatId,
+                    SenderId  = userId,
+                    Content   = "[Файл]",  
+                    FileId    = fileEntity.FileId,
                     CreatedAt = DateTime.UtcNow
                 };
-
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
-                await tx.CommitAsync();
 
+                await tx.CommitAsync();
                 return new OkObjectResult(new { FileId = fileEntity.FileId });
             }
             catch (Exception ex)
             {
                 await tx.RollbackAsync();
-                return new ObjectResult(new { error = ex.Message })
-                {
-                    StatusCode = 500
-                };
+                return new ObjectResult(new { error = ex.Message }) { StatusCode = 500 };
             }
         }
+
 
 
         public async Task<IActionResult> GetFile(int fileId)
