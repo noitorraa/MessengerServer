@@ -80,9 +80,10 @@ namespace MessengerServer.Services
         public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-            var encryptedPhone = await _context.Users.Select(u => _encryptionService.Decrypt(u.PhoneNumber)).FirstOrDefaultAsync(u => u == phone);
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == encryptedPhone);
-            if (user == null)
+            var users = (await _context.Users.ToListAsync())
+                .Select(u => new { u, DecryptedPhone = _encryptionService.Decrypt(u.PhoneNumber) })
+                .FirstOrDefault(u => u.DecryptedPhone == phone);
+            if (users == null)
             {
                 return new NotFoundObjectResult("Пользователь не найден");
             }
@@ -99,9 +100,10 @@ namespace MessengerServer.Services
         public async Task<IActionResult> ResetPassword(ResetModel model)
         {
             string phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
-            var encryptedPhone = await _context.Users.Select(u => _encryptionService.Decrypt(u.PhoneNumber)).FirstOrDefaultAsync(u => u == phone);
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == encryptedPhone);
-            if (user == null)
+            var users = (await _context.Users.ToListAsync())
+                .Select(u => new { u, DecryptedPhone = _encryptionService.Decrypt(u.PhoneNumber) })
+                .FirstOrDefault(u => u.DecryptedPhone == phone);
+            if (users == null)
             {
                 return new NotFoundObjectResult("Пользователь не найден");
             }
@@ -117,7 +119,7 @@ namespace MessengerServer.Services
                 return new BadRequestObjectResult("Пароль должен быть не менее 8 символов");
             }
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
+            users.u.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
             await _context.SaveChangesAsync();
             return new OkObjectResult("Пароль успешно изменён");
         }
