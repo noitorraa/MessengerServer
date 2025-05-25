@@ -35,7 +35,7 @@ namespace MessengerServer.Services
             var expiration = DateTime.UtcNow.AddMinutes(5);
             _pendingVerifications[phone] = (code, expiration);
 
-            // Отправка SMS через Email-to-SMS
+            // Отправка SMS
             bool isSent = await _smsService.SendSmsAsync(phone, $"Ваш код подтверждения: {code}");
             if (!isSent)
                 return new ObjectResult("Не удалось отправить SMS") { StatusCode = 500 };
