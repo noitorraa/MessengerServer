@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MessengerServer.Model;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using MessengerServer.Services;
 
 namespace MessengerServer.Services
 {
@@ -12,18 +13,21 @@ namespace MessengerServer.Services
         private readonly ISmsService _smsService;
         private readonly IVerificationService _verification;
         private readonly IResetCodeService _resetCodeService;
+        private readonly IEncryptionService _encryptionService;
         private static readonly ConcurrentDictionary<string, int> _smsResetRetryCount = new();
 
         public UserService(
             DefaultDbContext context,
             ISmsService smsService,
             IVerificationService verificationService,
-            IResetCodeService resetCodeService)
+            IResetCodeService resetCodeService,
+            IEncryptionService encryptionService)
         {
             _context = context;
             _smsService = smsService;
             _verification = verificationService;
             _resetCodeService = resetCodeService;
+            _encryptionService = encryptionService;
         }
 
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
@@ -76,7 +80,8 @@ namespace MessengerServer.Services
         public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone);
+            var encryptedPhone = await _context.Users.Select(u => _encryptionService.Decrypt(u.PhoneNumber)).FirstOrDefaultAsync(u => u == phone);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == encryptedPhone);
             if (user == null)
             {
                 return new NotFoundObjectResult("Пользователь не найден");
@@ -94,7 +99,8 @@ namespace MessengerServer.Services
         public async Task<IActionResult> ResetPassword(ResetModel model)
         {
             string phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone);
+            var encryptedPhone = await _context.Users.Select(u => _encryptionService.Decrypt(u.PhoneNumber)).FirstOrDefaultAsync(u => u == phone);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == encryptedPhone);
             if (user == null)
             {
                 return new NotFoundObjectResult("Пользователь не найден");
