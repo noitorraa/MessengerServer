@@ -47,9 +47,9 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("send-verification-code")]
-        public async Task<IActionResult> SendVerificationCode(string phone)
+        public async Task<IActionResult> SendVerificationCode([FromBody] PhoneRequest request)
         {
-            return await _verificationService.SendVerificationCode(phone);
+            return await _verificationService.SendVerificationCode(request.Phone);
         }
 
         [HttpPost("verify-code")]

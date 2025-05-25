@@ -12,6 +12,11 @@ namespace MessengerServer.Services
         public DateTime CreatedAt { get; set; }
     }
 
+    public class PhoneRequest
+    {
+        public string Phone { get; set; }
+    }
+
     public class UserDto
     {
         [Key]
