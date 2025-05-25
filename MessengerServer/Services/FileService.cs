@@ -38,17 +38,20 @@ namespace MessengerServer.Services
                     CreatedAt = DateTime.UtcNow
                 };
 
+                // Save the file first
+                _context.Files.Add(fileEntity);
+                await _context.SaveChangesAsync();
+
                 var message = new Message
                 {
                     ChatId = chatId,
                     SenderId = userId,
                     Content = "Файл",
-                    File = fileEntity,
+                    FileId = fileEntity.FileId, // Use the saved FileId
                     CreatedAt = DateTime.UtcNow
                 };
 
-                _context.AddRange(fileEntity, message);
-
+                _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
 
@@ -63,6 +66,7 @@ namespace MessengerServer.Services
                 };
             }
         }
+
 
         public async Task<IActionResult> GetFile(int fileId)
         {
