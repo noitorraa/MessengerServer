@@ -26,7 +26,7 @@ builder.Services.AddCors(opts =>
         .AllowAnyOrigin()));
 
 builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
-builder.Services.AddSingleton<ISmsService, EmailSmsService>();
+builder.Services.AddSingleton<ISmsService, SmsaeroService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVerificationService, VerificationService>();
 builder.Services.AddScoped<IChatService, ChatService>();
