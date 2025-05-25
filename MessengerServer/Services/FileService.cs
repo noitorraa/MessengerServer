@@ -21,7 +21,6 @@ namespace MessengerServer.Services
             if (file.Length > 16 * 1024 * 1024)
                 return new BadRequestObjectResult("Максимальный размер файла: 16 МБ");
 
-            // Читаем данные в байты
             byte[] fileBytes;
             await using (var ms = new MemoryStream())
             {
@@ -29,11 +28,10 @@ namespace MessengerServer.Services
                 fileBytes = ms.ToArray();
             }
 
-            // Начинаем транзакцию
             await using var tx = await _context.Database.BeginTransactionAsync();
             try
             {
-                // 1) Сохраняем сначала файл
+                // 1) Сохраняем только файл, чтобы БД сгенерировала FileId
                 var fileEntity = new Model.File
                 {
                     FileName  = file.FileName,
@@ -42,15 +40,15 @@ namespace MessengerServer.Services
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.Files.Add(fileEntity);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync();     // <-- здесь fileEntity.FileId != 0
 
-                // 2) Сохраняем сообщение, используя реальный FileId
+                // 2) Теперь создаём сообщение, явно используя сгенерированный FileId
                 var message = new Message
                 {
                     ChatId    = chatId,
                     SenderId  = userId,
-                    Content   = "[Файл]",  
-                    FileId    = fileEntity.FileId,
+                    Content   = "[Файл]",
+                    FileId    = fileEntity.FileId,       // теперь правильный ключ
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.Messages.Add(message);
@@ -65,8 +63,6 @@ namespace MessengerServer.Services
                 return new ObjectResult(new { error = ex.Message }) { StatusCode = 500 };
             }
         }
-
-
 
         public async Task<IActionResult> GetFile(int fileId)
         {
