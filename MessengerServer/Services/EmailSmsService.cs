@@ -12,14 +12,16 @@ namespace MessengerServer.Services
         public EmailSmsService(IConfiguration configuration)
         {
             var smtpSettings = configuration.GetSection("SmtpSettings");
-            _fromEmail = smtpSettings["FromEmail"];
+            _fromEmail = smtpSettings["FromEmail"] ?? throw new ArgumentNullException("FromEmail setting is missing in configuration");
 
-            _smtpClient = new SmtpClient(smtpSettings["Host"], int.Parse(smtpSettings["Port"]))
+            var host = smtpSettings["Host"] ?? throw new ArgumentNullException("Host setting is missing in configuration");
+            var port = smtpSettings["Port"] ?? throw new ArgumentNullException("Port setting is missing in configuration");
+            var username = smtpSettings["Username"] ?? throw new ArgumentNullException("Username setting is missing in configuration");
+            var password = smtpSettings["Password"] ?? throw new ArgumentNullException("Password setting is missing in configuration");
+
+            _smtpClient = new SmtpClient(host, int.Parse(port))
             {
-                Credentials = new NetworkCredential(
-                    smtpSettings["Username"],
-                    smtpSettings["Password"]
-                ),
+                Credentials = new NetworkCredential(username, password),
                 EnableSsl = true
             };
         }
@@ -59,7 +61,7 @@ namespace MessengerServer.Services
                 return "sms.mts.ru"; // МТС
             if (normalizedPhone.StartsWith("7902") || normalizedPhone.StartsWith("7903"))
                 return "sms.beemail.ru"; // Beeline
-            if (normalizedPhone.StartsWith("7925") || normalizedPhone.StartsWith("7933"))
+            if (normalizedPhone.StartsWith("7925") || normalizedPhone.StartsWith("7933") || normalizedPhone.StartsWith("7923"))
                 return "pager.megafon.ru"; // МегаФон
             if (normalizedPhone.StartsWith("7952") || normalizedPhone.StartsWith("7962"))
                 return "smsmail.utel.ru"; // Utel

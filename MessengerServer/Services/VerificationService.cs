@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MessengerServer.Services
@@ -16,7 +17,7 @@ namespace MessengerServer.Services
             _smsService = smsService;
         }
 
-        public IActionResult SendVerificationCode(string phone)
+        public async Task<IActionResult> SendVerificationCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
             if (string.IsNullOrEmpty(phone))
@@ -35,7 +36,7 @@ namespace MessengerServer.Services
             _pendingVerifications[phone] = (code, expiration);
 
             // Отправка SMS через Email-to-SMS
-            var isSent = _smsService.SendSmsAsync(phone, $"Ваш код подтверждения: {code}").Result;
+            bool isSent = await _smsService.SendSmsAsync(phone, $"Ваш код подтверждения: {code}");
             if (!isSent)
                 return new ObjectResult("Не удалось отправить SMS") { StatusCode = 500 };
 
@@ -74,7 +75,7 @@ namespace MessengerServer.Services
 
     public interface IVerificationService
     {
-        IActionResult SendVerificationCode(string phone);
+        Task<IActionResult> SendVerificationCode(string phone);
         IActionResult VerifyCode(string phone, string code);
         bool IsPhoneVerified(string phone);
     }
