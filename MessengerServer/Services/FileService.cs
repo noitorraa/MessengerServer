@@ -9,7 +9,6 @@ namespace MessengerServer.Services
     {
         public const long MAX_FILE_SIZE = 10_000_000;
         private readonly DefaultDbContext _context;
-
         public FileService(DefaultDbContext context)
         {
             _context = context;
@@ -24,7 +23,6 @@ namespace MessengerServer.Services
 
             await using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
-
             // Начнём транзакцию
             await using var tx = await _context.Database.BeginTransactionAsync();
 
