@@ -100,10 +100,11 @@ namespace MessengerServer.Controllers
         }
 
         [HttpPost("send-reset-code")]
-        public async Task<IActionResult> SendResetCode([FromBody] PhoneRequest request)
+        public async Task<IActionResult> SendResetCode([FromQuery] string phone)
         {
-            return await _userService.SendResetCode(request.Phone);
+            return await _userService.SendResetCode(phone);
         }
+
 
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetModel model)
