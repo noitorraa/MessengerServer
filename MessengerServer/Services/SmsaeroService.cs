@@ -47,7 +47,7 @@ namespace MessengerServer.Services
             var json = JObject.Parse(responseContent);
             return json["success"]?.Value<bool>() == true;
         }
-}
+    }
 
         public interface ISmsService
     {
