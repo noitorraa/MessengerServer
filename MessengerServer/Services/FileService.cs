@@ -38,9 +38,7 @@ namespace MessengerServer.Services
                     CreatedAt = DateTime.UtcNow
                 };
 
-                // Save the file first
                 _context.Files.Add(fileEntity);
-                await _context.SaveChangesAsync();
 
                 var message = new Message
                 {

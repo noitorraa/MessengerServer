@@ -98,7 +98,7 @@ public partial class DefaultDbContext : DbContext
         {
             entity.HasKey(e => e.FileId).HasName("PRIMARY");
 
-            entity.Property(e => e.FileId).ValueGeneratedNever();
+            entity.Property(e => e.FileId).ValueGeneratedNever().ValueGeneratedOnAdd();
             entity.Property(e => e.FileData).HasColumnType("MEDIUMBLOB");
             entity.Property(e => e.FileName).HasColumnType("text");
             entity.Property(e => e.FileType).HasColumnType("text");
