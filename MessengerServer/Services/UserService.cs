@@ -40,37 +40,32 @@ namespace MessengerServer.Services
             return new OkObjectResult(user);
         }
 
+
         public async Task<IActionResult> Registration([FromBody] User user)
         {
-            // 1. Очищаем номер от всех не-цифр:
             var phone = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
 
-            // 2. Проверяем, что по этому номеру на сервере уже прошла успешная верификация SMS-кода:
             if (!_verification.IsPhoneVerified(phone))
                 return new BadRequestObjectResult("Номер телефона не подтверждён");
 
-            // 3. (Опционально) Снимаем метку «подтверждён»,
-            //    чтобы один и тот же код нельзя было использовать повторно:
             _verification.ClearVerified(phone);
 
-            // 4. Проверяем, что логин (Username) не пустой:
             if (string.IsNullOrWhiteSpace(user.Username))
                 return new BadRequestObjectResult("Username не может быть пустым");
 
-            // 5. Убеждаемся, что пользователь с таким Username ещё не зарегистрирован:
             if (await _context.Users.AnyAsync(u => u.Username == user.Username))
                 return new ConflictObjectResult("Username already exists.");
 
-            // 6. Проверяем длину номера:
             if (phone.Length < 10 || phone.Length > 15)
                 return new BadRequestObjectResult("Неверный формат телефона");
 
-            // 7. Хешируем пароль (в user.PasswordHash на входе хранится «сырое» значение):
+            // хешируем пароль
             var rawPassword = user.PasswordHash;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rawPassword);
-            user.PhoneNumber  = phone;
 
-            // 8. Добавляем пользователя в базу:
+            // шифруем телефон детерминированно
+            user.PhoneNumber = _encryptionService.EncryptDeterministic(phone);
+
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
@@ -80,46 +75,44 @@ namespace MessengerServer.Services
         public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-            var users = (await _context.Users.ToListAsync())
-                .Select(u => new { u, DecryptedPhone = _encryptionService.Decrypt(u.PhoneNumber) })
-                .FirstOrDefault(u => u.DecryptedPhone == phone);
-            if (users == null)
-            {
+
+            var cipherPhone = _encryptionService.EncryptDeterministic(phone);
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.PhoneNumber == cipherPhone);
+
+            if (user == null)
                 return new NotFoundObjectResult("Пользователь не найден");
-            }
 
             int retry = _smsResetRetryCount.AddOrUpdate(phone, 1, (k, v) => v + 1);
             if (retry > 5)
-            {
                 return new BadRequestObjectResult("Слишком много попыток. Попробуйте позже.");
-            }
 
             return await _resetCodeService.SendResetCodeAsync(phone);
         }
 
         public async Task<IActionResult> ResetPassword(ResetModel model)
         {
-            string phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
-            var users = (await _context.Users.ToListAsync())
-                .Select(u => new { u, DecryptedPhone = _encryptionService.Decrypt(u.PhoneNumber) })
-                .FirstOrDefault(u => u.DecryptedPhone == phone);
-            if (users == null)
-            {
-                return new NotFoundObjectResult("Пользователь не найден");
-            }
+            var phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
+            var cipherPhone = _encryptionService.EncryptDeterministic(phone);
 
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.PhoneNumber == cipherPhone);
+
+            if (user == null)
+                return new NotFoundObjectResult("Пользователь не найден");
+
+            if (model.Code == null)
+            {
+                return new BadRequestObjectResult("Код для сброса пароля не может быть null.");
+            }
             var verifyResult = await _resetCodeService.VerifyResetCodeAsync(phone, model.Code);
             if (verifyResult is not OkResult)
-            {
                 return verifyResult;
-            }
 
             if (string.IsNullOrWhiteSpace(model.NewPassword) || model.NewPassword.Length < 8)
-            {
                 return new BadRequestObjectResult("Пароль должен быть не менее 8 символов");
-            }
 
-            users.u.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
             await _context.SaveChangesAsync();
             return new OkObjectResult("Пароль успешно изменён");
         }

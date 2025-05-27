@@ -39,8 +39,8 @@ public partial class DefaultDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var encryptConverter = new ValueConverter<string, string>(
-            plain => _encryptionService.Encrypt(plain),
-            cipher => _encryptionService.Decrypt(cipher)
+            plain => _encryptionService.EncryptDeterministic(plain),
+            cipher => _encryptionService.DecryptDeterministic(cipher)
         );
         
         modelBuilder
