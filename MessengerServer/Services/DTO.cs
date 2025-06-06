@@ -52,6 +52,8 @@ namespace MessengerServer.Services
 
         [JsonProperty("fileType")]
         public string? FileType { get; set; }
+        [JsonProperty("fileUrl")]
+        public string? FileUrl { get; set; }
 
         [JsonProperty("status")]
         public int Status { get; set; }

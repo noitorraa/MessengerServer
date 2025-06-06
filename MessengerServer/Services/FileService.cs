@@ -13,12 +13,17 @@ namespace MessengerServer.Services
         {
             _context = context;
         }
+        
+        public string GetFileUrl(int fileId) 
+        {
+            return $"/api/users/{fileId}";
+        }
 
         public async Task<IActionResult> UploadFile(int chatId, int userId, IFormFile file)
         {
             if (file == null || file.Length == 0)
                 return new BadRequestObjectResult("Файл не загружен");
-            if (file.Length > 16 * 1024 * 1024)
+            if (file.Length > MAX_FILE_SIZE)
                 return new BadRequestObjectResult("Максимальный размер файла: 16 МБ");
 
             byte[] fileBytes;
@@ -34,9 +39,9 @@ namespace MessengerServer.Services
                 // 1) Сохраняем только файл, чтобы БД сгенерировала FileId
                 var fileEntity = new Model.File
                 {
-                    FileName  = file.FileName,
-                    FileType  = file.ContentType,
-                    FileData  = fileBytes,
+                    FileName = file.FileName,
+                    FileType = file.ContentType,
+                    FileData = fileBytes,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.Files.Add(fileEntity);
@@ -45,17 +50,22 @@ namespace MessengerServer.Services
                 // 2) Теперь создаём сообщение, явно используя сгенерированный FileId
                 var message = new Message
                 {
-                    ChatId    = chatId,
-                    SenderId  = userId,
-                    Content   = "[Файл]",
-                    FileId    = fileEntity.FileId,       // теперь правильный ключ
+                    ChatId = chatId,
+                    SenderId = userId,
+                    Content = "[Файл]",
+                    FileId = fileEntity.FileId,       // теперь правильный ключ
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
 
                 await tx.CommitAsync();
-                return new OkObjectResult(new { FileId = fileEntity.FileId });
+                return new OkObjectResult(new
+                {
+                    FileId = fileEntity.FileId,
+                    FileName = fileEntity.FileName,
+                    FileType = fileEntity.FileType
+                });
             }
             catch (Exception ex)
             {

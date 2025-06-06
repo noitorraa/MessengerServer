@@ -9,6 +9,7 @@ namespace MessengerServer.Hubs
     public class ChatHub : Hub
     {
         private readonly DefaultDbContext _context;
+        private FileService _fileService;
 
         public ChatHub(DefaultDbContext context)
         {
@@ -69,6 +70,8 @@ namespace MessengerServer.Hubs
                 return;
             }
 
+            var fileUrl = _fileService.GetFileUrl(fileId);
+
             var newMessage = new Message
             {
                 Content = "Файл",
@@ -89,7 +92,8 @@ namespace MessengerServer.Hubs
                 CreatedAt = (DateTime)newMessage.CreatedAt,
                 FileId = fileId,
                 FileName = file.FileName,
-                FileType = file.FileType
+                FileType = file.FileType,
+                FileUrl = fileUrl
             };
 
             var recipients = await _context.ChatMembers
