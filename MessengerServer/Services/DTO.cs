@@ -92,7 +92,6 @@ namespace MessengerServer.Services
 
     public class UserProfileDto
     {
-        public string? Username { get; set; }
         public byte[]? Avatar { get; set; }
     }
 

@@ -181,7 +181,6 @@ namespace MessengerServer.Services
 
             var userProfileDto = new UserProfileDto
             {
-                Username = user.Username,
                 Avatar = user.Avatar
             };
 

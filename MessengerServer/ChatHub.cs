@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿// ChatHub.cs (сервер)
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MessengerServer.Model;
 using static MessengerServer.Controllers.UsersController;
@@ -9,11 +10,12 @@ namespace MessengerServer.Hubs
     public class ChatHub : Hub
     {
         private readonly DefaultDbContext _context;
-        private FileService _fileService;
+        private readonly FileService _fileService;
 
-        public ChatHub(DefaultDbContext context)
+        public ChatHub(DefaultDbContext context, FileService fileService)
         {
             _context = context;
+            _fileService = fileService;
         }
 
         // Отправка сообщения с поддержкой файлов
@@ -31,7 +33,6 @@ namespace MessengerServer.Hubs
             _context.Messages.Add(newMessage);
             await _context.SaveChangesAsync();
 
-            // Загружаем связанный файл
             await _context.Entry(newMessage).Reference(m => m.File).LoadAsync();
 
             var recipients = await _context.ChatMembers
@@ -39,7 +40,6 @@ namespace MessengerServer.Hubs
                 .Select(cm => cm.UserId)
                 .ToListAsync();
 
-            // Формируем DTO с именем файла
             var messageDto = new MessageDto
             {
                 MessageId = newMessage.MessageId,
@@ -47,11 +47,10 @@ namespace MessengerServer.Hubs
                 UserID = userId,
                 CreatedAt = (DateTime)newMessage.CreatedAt,
                 FileId = newMessage.FileId,
-                FileName = newMessage.File?.FileName ?? string.Empty, // Важно!
+                FileName = newMessage.File?.FileName ?? string.Empty,
                 FileType = newMessage.File?.FileType ?? string.Empty
             };
 
-            // Обновляем статусы и отправляем сообщение
             foreach (var recipientId in recipients)
             {
                 await UpdateMessageStatus(newMessage.MessageId, recipientId, (int)MessageStatusType.Delivered);
@@ -112,13 +111,12 @@ namespace MessengerServer.Hubs
         // Пометка сообщений как прочитанных
         public async Task MarkMessagesAsRead(int chatId, int userId)
         {
-            // 1) Смотрим, какие сообщения ещё «не прочитаны»
+            // Исправленный запрос
             var unreadMessages = await _context.Messages
                 .Include(m => m.MessageStatuses)
-                .Where(m => m.ChatId == chatId
-                    && m.SenderId != userId
-                    && (m.MessageStatuses.All(ms => ms.UserId != userId)
-                        || m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status < (int)MessageStatusType.Read)))
+                .Where(m => m.ChatId == chatId && m.SenderId != userId)
+                .Where(m => m.MessageStatuses.All(ms => ms.UserId != userId) || 
+                        m.MessageStatuses.Any(ms => ms.UserId == userId && ms.Status < (int)MessageStatusType.Read))
                 .ToListAsync();
 
             if (!unreadMessages.Any())
@@ -128,7 +126,6 @@ namespace MessengerServer.Hubs
             var readStatus = (int)MessageStatusType.Read;
             var messageIds = unreadMessages.Select(m => m.MessageId).ToList();
 
-            // 2) Подгружаем уже существующие статусы из БД
             var existingStatuses = await _context.MessageStatuses
                 .Where(ms => ms.UserId == userId && messageIds.Contains(ms.MessageId))
                 .ToListAsync();
@@ -140,13 +137,11 @@ namespace MessengerServer.Hubs
                 var exist = existingStatuses.FirstOrDefault(ms => ms.MessageId == msg.MessageId);
                 if (exist != null)
                 {
-                    // 3a) Обновляем запись
                     exist.Status = readStatus;
                     exist.UpdatedAt = now;
                 }
                 else
                 {
-                    // 3b) Создаем новую
                     var ms = new MessageStatus
                     {
                         MessageId = msg.MessageId,
@@ -155,7 +150,7 @@ namespace MessengerServer.Hubs
                         UpdatedAt = now
                     };
                     _context.MessageStatuses.Add(ms);
-                    existingStatuses.Add(ms); // чтобы в будущем не дублировать
+                    existingStatuses.Add(ms);
                 }
 
                 statusDtos.Add(new StatusDto
@@ -165,15 +160,9 @@ namespace MessengerServer.Hubs
                 });
             }
 
-            // 4) Сохраняем все изменения одним SaveChanges
             await _context.SaveChangesAsync();
-
-            // 5) Пушим единым пакетом
-            await Clients.Group($"chat_{chatId}")
-                .SendAsync("BatchUpdateStatuses", statusDtos);
+            await Clients.Group($"user_{userId}").SendAsync("BatchUpdateStatuses", statusDtos);
         }
-
-
 
         // Обновление статуса сообщения
         private async Task UpdateMessageStatus(int messageId, int userId, int status)
@@ -199,6 +188,14 @@ namespace MessengerServer.Hubs
             }
 
             await _context.SaveChangesAsync();
+            
+            var statusDto = new StatusDto
+            {
+                MessageId = messageId,
+                Status = status
+            };
+            
+            await Clients.Group($"user_{userId}").SendAsync("UpdateMessageStatus", statusDto);
         }
 
         // Вход в группу чата
@@ -215,11 +212,11 @@ namespace MessengerServer.Hubs
             Console.WriteLine($"Connection {Context.ConnectionId} joined group {groupName}");
         }
     }
+    
+    public enum MessageStatusType
+    {
+        Sent = 0,
+        Delivered = 1,
+        Read = 2
+    }
 }
-
-        public enum MessageStatusType
-        {
-            Sent = 0,       // Отправлено
-            Delivered = 1,  // Доставлено
-            Read = 2        // Прочитано
-        }
