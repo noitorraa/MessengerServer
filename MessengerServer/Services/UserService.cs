@@ -165,10 +165,36 @@ namespace MessengerServer.Services
                 );
             return chat != null ? new OkObjectResult(chat) : new NotFoundResult();
         }
+
+        public async Task<User?> GetUserById(int userId)
+        {
+            return await _context.Users.FindAsync(userId);
+        }
+
+        public async Task<ActionResult<UserProfileDto>> GetUserProfile(int userId)
+        {
+            var user = await GetUserById(userId);
+            if (user == null)
+            {
+                return new NotFoundObjectResult(new { Message = "Пользователь не найден" });
+            }
+
+            var userProfileDto = new UserProfileDto
+            {
+                Username = user.Username,
+                Avatar = user.Avatar
+            };
+
+            return new OkObjectResult(userProfileDto);
+        }
+
     }
 
     public interface IUserService
     {
+        Task<User?> GetUserById(int userId);
+        Task<IActionResult> ChangeAvatar(ChangeAvatarRequest request);
+        Task<ActionResult<UserProfileDto>> GetUserProfile(int userId);
         Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password);
         Task<IActionResult> Registration([FromBody] User user);
         Task<IActionResult> SendResetCode(string phone);
@@ -176,6 +202,5 @@ namespace MessengerServer.Services
         Task<ActionResult<List<User>>> SearchUsersByLogin(string login);
         Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id);
         Task<IActionResult> ChangeLogin(ChangeLoginRequest request);
-        Task<IActionResult> ChangeAvatar(ChangeAvatarRequest request);
     }
 }

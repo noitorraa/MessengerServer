@@ -89,4 +89,11 @@ namespace MessengerServer.Services
         public int UserId { get; set; }
         public byte[] NewAvatar { get; set; }
     }
+
+    public class UserProfileDto
+    {
+        public string? Username { get; set; }
+        public byte[]? Avatar { get; set; }
+    }
+
 }

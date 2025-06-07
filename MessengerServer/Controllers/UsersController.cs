@@ -146,5 +146,13 @@ namespace MessengerServer.Controllers
         {
             return await _fileService.GetFile(fileId);
         }
+
+        [HttpGet("profile/{userId}")]
+        public async Task<ActionResult<UserProfileDto>> GetUserProfile(int userId)
+        {
+            return await _userService.GetUserProfile(userId);
+        }
+
+
     }
 }
