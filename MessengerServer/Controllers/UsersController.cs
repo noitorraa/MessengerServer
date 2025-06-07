@@ -35,6 +35,18 @@ namespace MessengerServer.Controllers
             _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
         }
 
+        [HttpPut("change-login")]
+        public async Task<IActionResult> ChangeLogin([FromBody] ChangeLoginRequest request)
+        {
+            return await _userService.ChangeLogin(request);
+        }
+
+        [HttpPut("change-avatar")]
+        public async Task<IActionResult> ChangeAvatar([FromBody] ChangeAvatarRequest request)
+        {
+            return await _userService.ChangeAvatar(request);
+        }
+
         private void CleanupExpiredData(object? state)
         {
             _cleanupService.CleanupExpiredData();

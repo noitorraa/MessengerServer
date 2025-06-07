@@ -15,6 +15,8 @@ public partial class User
 
     public string? PhoneNumber { get; set; }
 
+    public byte[]? Avatar { get; set; }
+
     public virtual ICollection<ChatMember> ChatMembers { get; set; } = new List<ChatMember>();
 
     public virtual ICollection<MessageStatus> MessageStatuses { get; set; } = new List<MessageStatus>();

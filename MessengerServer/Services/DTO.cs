@@ -77,4 +77,16 @@ namespace MessengerServer.Services
         public string? Code { get; set; }
         public string? NewPassword { get; set; }
     }
+
+    public class ChangeLoginRequest
+    {
+        public int UserId { get; set; }
+        public string NewLogin { get; set; }
+    }
+
+    public class ChangeAvatarRequest
+    {
+        public int UserId { get; set; }
+        public byte[] NewAvatar { get; set; }
+    }
 }

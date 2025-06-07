@@ -63,8 +63,6 @@ namespace MessengerServer.Services
             var rawPassword = user.PasswordHash;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rawPassword);
 
-            // шифруем телефон детерминированно
-            user.PhoneNumber = _encryptionService.EncryptDeterministic(phone);
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -117,6 +115,32 @@ namespace MessengerServer.Services
             return new OkObjectResult("Пароль успешно изменён");
         }
 
+        public async Task<IActionResult> ChangeLogin(ChangeLoginRequest request)
+        {
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (user == null)
+            {
+                return new NotFoundObjectResult(new { Message = "Пользователь не найден" });
+            }
+
+            user.Username = request.NewLogin;
+            await _context.SaveChangesAsync();
+            return new OkObjectResult(new { Message = "Логин успешно изменён" });
+        }
+
+        public async Task<IActionResult> ChangeAvatar(ChangeAvatarRequest request)
+        {
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (user == null)
+            {
+                return new NotFoundObjectResult(new { Message = "Пользователь не найден" });
+            }
+
+            user.Avatar = request.NewAvatar;
+            await _context.SaveChangesAsync();
+            return new OkObjectResult(new { Message = "Аватар успешно изменён" });
+        }
+
         public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
         {
             var users = await _context.Users
@@ -151,5 +175,7 @@ namespace MessengerServer.Services
         Task<IActionResult> ResetPassword(ResetModel model);
         Task<ActionResult<List<User>>> SearchUsersByLogin(string login);
         Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id);
+        Task<IActionResult> ChangeLogin(ChangeLoginRequest request);
+        Task<IActionResult> ChangeAvatar(ChangeAvatarRequest request);
     }
 }

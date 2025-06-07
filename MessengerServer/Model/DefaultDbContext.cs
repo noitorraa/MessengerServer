@@ -196,10 +196,15 @@ public partial class DefaultDbContext : DbContext
                 .HasColumnName("password_hash");
             entity.Property(e => e.PhoneNumber)
                 .HasColumnType("text")
-                .HasColumnName("phoneNumber").HasConversion(encryptConverter);
+                .HasColumnName("phoneNumber")
+                .HasConversion(encryptConverter);
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
-                .HasColumnName("username");
+                .HasColumnName("username")
+                .HasConversion(encryptConverter);
+            entity.Property(e => e.Avatar)
+                .HasColumnName("Avatar")
+                .HasConversion(encryptConverter);
         });
 
         OnModelCreatingPartial(modelBuilder);
