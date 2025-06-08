@@ -99,15 +99,13 @@ namespace MessengerServer.Hubs
                     .SendAsync("ReceiveMessage", dto);
 
                 // каждому участнику — его статус Delivered/Sent
-                foreach (var st in statuses)
-                {
-                    await Clients.Group($"user_{st.UserId}")
-                        .SendAsync("UpdateMessageStatus", new StatusDto
-                        {
-                            MessageId = st.MessageId,
-                            Status = st.Status
-                        });
-                }
+                var senderStatus = statuses.First(st => st.UserId == message.SenderId);
+                await Clients.Group($"user_{message.SenderId}")
+                    .SendAsync("UpdateMessageStatus", new StatusDto
+                    {
+                        MessageId = message.MessageId,
+                        Status = senderStatus.Status
+                    });
             }
             catch (Exception ex)
             {
@@ -143,8 +141,8 @@ namespace MessengerServer.Hubs
             var unread = await _context.MessageStatuses
                 .Include(ms => ms.Message)
                 .Where(ms => ms.Message.ChatId == chatId
-                             && ms.UserId == userId
-                             && ms.Status < (int)MessageStatusType.Read)
+                            && ms.UserId == userId
+                            && ms.Status < (int)MessageStatusType.Read)
                 .ToListAsync();
 
             if (!unread.Any()) return;
@@ -163,16 +161,18 @@ namespace MessengerServer.Hubs
                 Status = ms.Status
             }).ToList();
 
-            // отправляем batch-обновления и читающему, и авторам
-            await Clients.Group($"user_{userId}")
-                .SendAsync("BatchUpdateStatuses", statusDtos);
+            // **УБРАЛИ**: уведомление себя
+            // await Clients.Group($"user_{userId}")
+            //     .SendAsync("BatchUpdateStatuses", statusDtos);
 
+            // Оставляем только авторам
             foreach (var senderId in unread.Select(ms => ms.Message.SenderId).Distinct())
             {
                 await Clients.Group($"user_{senderId}")
                     .SendAsync("BatchUpdateStatuses", statusDtos);
             }
         }
+
 
         /// <summary>
         /// Общий метод для обновления статуса одного сообщения и рассылки уведомлений
@@ -210,10 +210,6 @@ namespace MessengerServer.Hubs
                     MessageId = messageId,
                     Status = status
                 };
-
-                // уведомляем того, кто читает
-                await Clients.Group($"user_{userId}")
-                    .SendAsync("UpdateMessageStatus", dto);
 
                 // уведомляем автора
                 var message = await _context.Messages.FindAsync(messageId);
