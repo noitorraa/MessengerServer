@@ -141,10 +141,10 @@ namespace MessengerServer.Services
         {
             try
             {
-                string encryptedLogin = _encryptionService.EncryptDeterministic(login);
+                var normalizedLogin = login.ToLower();
 
                 var users = await _context.Users
-                    .Where(u => u.Username.Contains(encryptedLogin))
+                    .Where(u => u.Username.ToLower().Contains(normalizedLogin))
                     .ToListAsync();
 
                 return users.Any()

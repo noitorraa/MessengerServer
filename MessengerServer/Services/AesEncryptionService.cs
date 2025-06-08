@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -28,12 +29,12 @@ public class AesEncryptionService : IEncryptionService
     /// Детерминированное шифрование: IV = первые _blockSizeBytes байт SHA-256(plainText).
     /// Результат — Base64 от чистого шифротекста (без IV в префиксе).
     /// </summary>
-      public string EncryptDeterministic(string plainText)
+    public string EncryptDeterministic(string plainText)
     {
         if (plainText is null) throw new ArgumentNullException(nameof(plainText));
 
         byte[] iv = ComputeIv(plainText);
-        
+
         using var aes = Aes.Create();
         aes.Key = _key;
         aes.IV = iv;
@@ -47,7 +48,7 @@ public class AesEncryptionService : IEncryptionService
         {
             sw.Write(plainText);
         }
-        
+
         return Convert.ToBase64String(iv.Concat(ms.ToArray()).ToArray());
     }
 
