@@ -139,17 +139,25 @@ namespace MessengerServer.Services
             return new OkObjectResult(new { Message = "Аватар успешно изменён" });
         }
 
-        public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
+        public async Task<ActionResult<List<User>>> SearchUsersByLogin([FromQuery] string login)
         {
+            if (string.IsNullOrWhiteSpace(login))
+                return new BadRequestObjectResult(new { Message = "Параметр поиска не должен быть пустым"});
+
+            // Нормализуем и ищем нечувствительно к регистру
+            var normalized = login.Trim().ToLower();
+
             var users = await _context.Users
-                .Where(u => u.Username.Contains(login))
+                .Where(u => u.Username.ToLower().Contains(normalized))
                 .ToListAsync();
 
-            if (users == null || !users.Any())
+            if (users.Count == 0)
             {
-                return new NotFoundObjectResult(new { Message = "Пользователи не найдены" });
+                return new NotFoundObjectResult(new { Message = "Пользователи не найдены"});
             }
+
             return new OkObjectResult(users);
+
         }
 
         public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
