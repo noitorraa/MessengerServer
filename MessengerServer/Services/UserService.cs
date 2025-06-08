@@ -73,10 +73,9 @@ namespace MessengerServer.Services
         public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-
-            var cipherPhone = _encryptionService.EncryptDeterministic(phone);
+            
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.PhoneNumber == cipherPhone);
+                .FirstOrDefaultAsync(u => u.PhoneNumber == phone);
 
             if (user == null)
                 return new NotFoundObjectResult("Пользователь не найден");
@@ -91,10 +90,9 @@ namespace MessengerServer.Services
         public async Task<IActionResult> ResetPassword(ResetModel model)
         {
             var phone = Regex.Replace(model.Phone ?? "", @"[^\d]", "");
-            var cipherPhone = _encryptionService.EncryptDeterministic(phone);
 
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.PhoneNumber == cipherPhone);
+                .FirstOrDefaultAsync(u => u.PhoneNumber == phone);
 
             if (user == null)
                 return new NotFoundObjectResult("Пользователь не найден");

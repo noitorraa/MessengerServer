@@ -200,7 +200,8 @@ public partial class DefaultDbContext : DbContext
                 .HasConversion(encryptConverter);
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
-                .HasColumnName("username");
+                .HasColumnName("username")
+                .HasConversion(encryptConverter);
 entity.Property(e => e.Avatar)
     .HasColumnName("Avatar");
         });
