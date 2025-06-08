@@ -40,7 +40,6 @@ namespace MessengerServer.Services
             return new OkObjectResult(user);
         }
 
-
         public async Task<IActionResult> Registration([FromBody] User user)
         {
             var phone = Regex.Replace(user.PhoneNumber ?? "", @"[^\d]", "");
@@ -63,7 +62,6 @@ namespace MessengerServer.Services
             var rawPassword = user.PasswordHash;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rawPassword);
 
-
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
@@ -73,7 +71,7 @@ namespace MessengerServer.Services
         public async Task<IActionResult> SendResetCode(string phone)
         {
             phone = Regex.Replace(phone ?? "", @"[^\d]", "");
-            
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.PhoneNumber == phone);
 
@@ -139,20 +137,25 @@ namespace MessengerServer.Services
             return new OkObjectResult(new { Message = "Аватар успешно изменён" });
         }
 
-        public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login) // потом придумать как оптимизировать поиск с шифрованием
+        public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
         {
-            var allUsers = await _context.Users.ToListAsync();
-            
-            var filteredUsers = allUsers
-                .Where(u => 
-                    _encryptionService.DecryptDeterministic(u.Username)
-                    .Contains(login, StringComparison.OrdinalIgnoreCase)
-                )
-                .ToList();
-            
-            return filteredUsers.Any() 
-                ? new OkObjectResult(filteredUsers) 
-                : new NotFoundObjectResult(new { Message = "Пользователи не найдены" });
+            try
+            {
+                string encryptedLogin = _encryptionService.EncryptDeterministic(login);
+
+                var users = await _context.Users
+                    .Where(u => u.Username.Contains(encryptedLogin))
+                    .ToListAsync();
+
+                return users.Any()
+                    ? new OkObjectResult(users)
+                    : new NotFoundObjectResult(new { Message = "Пользователи не найдены" });
+            }
+            catch (Exception ex)
+            {
+                // Логирование ошибки
+                throw new InvalidOperationException("Internal server error", ex);
+            }
         }
 
         public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
@@ -187,7 +190,6 @@ namespace MessengerServer.Services
 
             return new OkObjectResult(userProfileDto);
         }
-
     }
 
     public interface IUserService
