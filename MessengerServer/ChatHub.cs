@@ -59,50 +59,7 @@ namespace MessengerServer.Hubs
 
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            var file = await _context.Files.FindAsync(fileId);
-            if (file == null)
-            {
-                await Clients.Caller.SendAsync("Error", "Файл не найден");
-                return;
-            }
-
-            //var fileUrl = _fileService.GetFileUrl(fileId);
-
-            var newMessage = new Message
-            {
-                Content = "Файл",
-                SenderId = userId,
-                ChatId = chatId,
-                CreatedAt = DateTime.UtcNow,
-                FileId = fileId
-            };
-
-            _context.Messages.Add(newMessage);
-            await _context.SaveChangesAsync();
-
-            var messageDto = new MessageDto
-            {
-                MessageId = newMessage.MessageId,
-                Content = newMessage.Content,
-                UserID = userId,
-                CreatedAt = (DateTime)newMessage.CreatedAt,
-                FileId = fileId,
-                FileName = file.FileName,
-                FileType = file.FileType,
-                //FileUrl = fileUrl
-            };
-
-            var recipients = await _context.ChatMembers
-                .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
-                .Select(cm => cm.UserId)
-                .ToListAsync();
-
-            foreach (var recipientId in recipients)
-            {
-                await UpdateMessageStatus(newMessage.MessageId, recipientId, (int)MessageStatusType.Delivered);
-            }
-
-            await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", messageDto);
+            //await Clients.Group($"chat_{chatId}").SendAsync("ReceiveMessage", messageDto);
         }
 
         public async Task MarkMessagesAsRead(int chatId, int userId)
