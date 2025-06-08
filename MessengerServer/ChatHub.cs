@@ -9,9 +9,9 @@ namespace MessengerServer.Hubs
     public class ChatHub : Hub
     {
         private readonly DefaultDbContext _context;
-        private readonly FileService _fileService;
+        private readonly IFileService  _fileService;
 
-        public ChatHub(DefaultDbContext context, FileService fileService)
+        public ChatHub(DefaultDbContext context, IFileService  fileService)
         {
             _context = context;
             _fileService = fileService;
@@ -66,7 +66,7 @@ namespace MessengerServer.Hubs
                 return;
             }
 
-            var fileUrl = _fileService.GetFileUrl(fileId);
+            //var fileUrl = _fileService.GetFileUrl(fileId);
 
             var newMessage = new Message
             {
@@ -89,7 +89,7 @@ namespace MessengerServer.Hubs
                 FileId = fileId,
                 FileName = file.FileName,
                 FileType = file.FileType,
-                FileUrl = fileUrl
+                //FileUrl = fileUrl
             };
 
             var recipients = await _context.ChatMembers
