@@ -13,18 +13,41 @@ namespace MessengerServer.Services
             _context = context;
         }
 
-        public async Task<IActionResult> GetMessages(int userId, int chatId)
+        public async Task<IActionResult> GetMessages(
+            int userId, 
+            int chatId,
+            [FromQuery] DateTime? since = null,
+            [FromQuery] DateTime? before = null,
+            [FromQuery] int skip = 0,
+            [FromQuery] int take = 100)
         {
+            // Получаем ID собеседника
             var otherUserId = await _context.ChatMembers
                 .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
                 .Select(cm => cm.UserId)
                 .FirstOrDefaultAsync();
             
-            var messages = await _context.Messages
-                .Where(m => m.ChatId == chatId)
+            // Базовый запрос с фильтрацией по чату
+            var baseQuery = _context.Messages
+                .Where(m => m.ChatId == chatId);
+            
+            // Применяем фильтр по времени если указан
+            if (since.HasValue)
+            {
+                baseQuery = baseQuery.Where(m => m.CreatedAt > since.Value);
+            }
+            if (before.HasValue)
+            {
+                baseQuery = baseQuery.Where(m => m.CreatedAt < before.Value);
+            }
+                    
+            // Получаем сообщения с пагинацией
+            var messages = await baseQuery
                 .Include(m => m.File)
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => new
+                .OrderByDescending(m => m.CreatedAt) // Сначала самые новые
+                .Skip(skip)
+                .Take(take)
+                .Select(m => new 
                 {
                     Message = m,
                     FileInfo = m.File,
@@ -37,6 +60,10 @@ namespace MessengerServer.Services
                         .Select(ms => (int?)ms.Status)
                         .FirstOrDefault()
                 })
+                .ToListAsync();
+            
+            // Создаем DTO и упорядочиваем от старых к новым
+            var result = messages
                 .Select(x => new MessageDto
                 {
                     MessageId = x.Message.MessageId,
@@ -49,14 +76,21 @@ namespace MessengerServer.Services
                     Status = x.Message.SenderId == userId
                         ? x.StatusForRecipient ?? 0
                         : x.StatusForCurrentUser ?? 0
-                }).ToListAsync();
+                })
+                .OrderBy(m => m.CreatedAt) // Важно: возвращаем в хронологическом порядке
+                .ToList();
             
-            return new OkObjectResult(messages);
+            return new OkObjectResult(result);
         }
     }
 
     public interface IMessageService
     {
-        Task<IActionResult> GetMessages(int userId, int chatId);
+        Task<IActionResult> GetMessages(    int userId, 
+    int chatId,
+    [FromQuery] DateTime? since = null,
+    [FromQuery] DateTime? before = null,
+    [FromQuery] int skip = 0,
+    [FromQuery] int take = 100);
     }
 }

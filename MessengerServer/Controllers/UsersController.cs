@@ -77,9 +77,15 @@ namespace MessengerServer.Controllers
         }
 
         [HttpGet("chats/{chatId}/{userId}/messages")]
-        public async Task<IActionResult> GetMessages(int userId, int chatId)
+        public async Task<IActionResult> GetMessages(
+            int userId, 
+            int chatId,
+            [FromQuery] DateTime? since = null,
+            [FromQuery] DateTime? before = null,
+            [FromQuery] int skip = 0,
+            [FromQuery] int take = 100)
         {
-            return await _messageService.GetMessages(userId, chatId);
+            return await _messageService.GetMessages(userId, chatId, since, before, skip, take);
         }
 
         [HttpDelete("chats/{chatId}")]
