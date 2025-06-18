@@ -119,7 +119,7 @@ namespace MessengerServer.Hubs
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
             // **CHANGED**: Реализовано аналогично SendMessage, но content пустой
-            await SendMessage(userId, string.Empty, chatId, fileId);
+            await SendMessage(userId, "[Файл]", chatId, fileId);
         }
 
         /// <summary>
@@ -161,11 +161,6 @@ namespace MessengerServer.Hubs
                 Status = ms.Status
             }).ToList();
 
-            // **УБРАЛИ**: уведомление себя
-            // await Clients.Group($"user_{userId}")
-            //     .SendAsync("BatchUpdateStatuses", statusDtos);
-
-            // Оставляем только авторам
             foreach (var senderId in unread.Select(ms => ms.Message.SenderId).Distinct())
             {
                 await Clients.Group($"user_{senderId}")

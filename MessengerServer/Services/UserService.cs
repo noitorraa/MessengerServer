@@ -113,6 +113,16 @@ namespace MessengerServer.Services
 
         public async Task<IActionResult> ChangeLogin(ChangeLoginRequest request)
         {
+            if (string.IsNullOrEmpty(request.NewLogin))
+            {
+                return new BadRequestObjectResult(new { Message = "New login cannot be null or empty." });
+            }
+
+            if (request.NewLogin.Length < 3 || request.NewLogin.Length > 20)
+            {
+                return new BadRequestObjectResult(new { Message = "New login must be between 3 and 20 characters." });
+            }
+
             var user = await _context.Users.FindAsync(request.UserId);
             if (user == null)
             {

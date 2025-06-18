@@ -100,8 +100,8 @@ public partial class DefaultDbContext : DbContext
 
             entity.Property(e => e.FileId).ValueGeneratedOnAdd();
             entity.Property(e => e.FileData).HasColumnType("MEDIUMBLOB");
-            entity.Property(e => e.FileName).HasColumnType("text");
-            entity.Property(e => e.FileType).HasColumnType("text");
+            entity.Property(e => e.FileName).HasColumnType("text").HasConversion(encryptConverter);
+            entity.Property(e => e.FileType).HasColumnType("text").HasConversion(encryptConverter);
         });
 
         modelBuilder.Entity<Message>(entity =>
