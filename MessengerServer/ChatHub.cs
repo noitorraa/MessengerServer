@@ -42,8 +42,6 @@ namespace MessengerServer.Hubs
 
             await base.OnConnectedAsync();
         }
-
-        // Отправка текстового сообщения
         public async Task SendMessage(int userId, string content, int chatId, int? fileId = null)
         {
             using var tx = await _context.Database.BeginTransactionAsync();
@@ -59,6 +57,14 @@ namespace MessengerServer.Hubs
                 };
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
+
+                // Подгружаем файл, если есть
+                if (fileId.HasValue)
+                {
+                    await _context.Entry(message)
+                        .Reference(m => m.File)
+                        .LoadAsync();
+                }
 
                 // создаём статусы для всех участников: Sent для автора, Delivered для остальных
                 var members = await _context.ChatMembers
@@ -114,11 +120,8 @@ namespace MessengerServer.Hubs
                 throw;
             }
         }
-
-        // Отправка сообщения с файлом
         public async Task SendFileMessage(int userId, int fileId, int chatId)
         {
-            // **CHANGED**: Реализовано аналогично SendMessage, но content пустой
             await SendMessage(userId, "[Файл]", chatId, fileId);
         }
 
