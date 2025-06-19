@@ -65,26 +65,33 @@ namespace MessengerServer.Hubs
                         .LoadAsync();
                 }
 
-                // Получаем только собеседника (исключая отправителя)
-                var recipientId = await _context.ChatMembers
+                // Получаем всех собеседников (исключая отправителя)
+                var recipientIds = await _context.ChatMembers
                     .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
                     .Select(cm => cm.UserId)
-                    .SingleOrDefaultAsync();
+                    .ToListAsync();
 
-                // Создаём только ОДИН статус - для получателя
-                var status = new MessageStatus
+                // Создаём статусы для каждого получателя
+                var now = DateTime.UtcNow;
+                var statuses = new List<MessageStatus>();
+
+                foreach (var recId in recipientIds)
                 {
-                    MessageId = message.MessageId,
-                    UserId = recipientId,
-                    Status = (int)MessageStatusType.Delivered,
-                    UpdatedAt = DateTime.UtcNow
-                };
+                    var status = new MessageStatus
+                    {
+                        MessageId = message.MessageId,
+                        UserId = recId,
+                        Status = (int)MessageStatusType.Delivered,
+                        UpdatedAt = now
+                    };
+                    statuses.Add(status);
+                    _context.MessageStatuses.Add(status);
+                }
 
-                _context.MessageStatuses.Add(status);
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                // DTO для отправителя (с статусом)
+                // DTO для отправителя (со статусом Delivered)
                 var senderDto = new MessageDto
                 {
                     MessageId = message.MessageId,
@@ -94,7 +101,7 @@ namespace MessengerServer.Hubs
                     FileId = fileId,
                     FileName = message.File?.FileName,
                     FileType = message.File?.FileType,
-                    Status = (int)MessageStatusType.Sent
+                    Status = (int)MessageStatusType.Delivered
                 };
 
                 // DTO для получателя (без статуса)
@@ -110,13 +117,16 @@ namespace MessengerServer.Hubs
                     Status = null
                 };
 
-                // Отправляем отправителю его версию
+                // Отправляем отправителю
                 await Clients.Group($"user_{userId}")
                     .SendAsync("ReceiveMessage", senderDto);
 
-                // Отправляем получателю его версию
-                await Clients.Group($"user_{recipientId}")
-                    .SendAsync("ReceiveMessage", recipientDto);
+                // Отправляем всем получателям
+                foreach (var recId in recipientIds)
+                {
+                    await Clients.Group($"user_{recId}")
+                        .SendAsync("ReceiveMessage", recipientDto);
+                }
             }
             catch (Exception ex)
             {
@@ -126,28 +136,20 @@ namespace MessengerServer.Hubs
             }
         }
 
-        public async Task SendFileMessage(int userId, int fileId, int chatId)
-        {
-            await SendMessage(userId, "[Файл]", chatId, fileId);
-        }
 
-        /// <summary>
-        /// **CHANGED**: Новый метод для пометки одного сообщения как прочитанного
-        /// Вызывается при получении каждого нового сообщения в клиенте
-        /// </summary>
-        public async Task MarkMessageAsRead(int messageId, int userId)
+        public async Task MarkMessageAsRead(int messageId, int recipientId)
         {
             using var tx = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Находим статус для обновления (только для получателя)
+                // Находим статус для обновления
                 var status = await _context.MessageStatuses
                     .FirstOrDefaultAsync(ms =>
                         ms.MessageId == messageId &&
-                        ms.UserId == userId &&
-                        ms.Status < (int)MessageStatusType.Read);
+                        ms.UserId == recipientId);
 
-                if (status != null)
+                // Если статус еще не Read, обновляем
+                if (status != null && status.Status < (int)MessageStatusType.Read)
                 {
                     status.Status = (int)MessageStatusType.Read;
                     status.UpdatedAt = DateTime.UtcNow;
@@ -155,10 +157,14 @@ namespace MessengerServer.Hubs
                     await tx.CommitAsync();
 
                     // Уведомляем отправителя об изменении статуса
-                    var message = await _context.Messages.FindAsync(messageId);
-                    if (message != null)
+                    var senderId = await _context.Messages
+                        .Where(m => m.MessageId == messageId)
+                        .Select(m => m.SenderId)
+                        .FirstOrDefaultAsync();
+
+                    if (senderId != 0)
                     {
-                        await Clients.Group($"user_{message.SenderId}")
+                        await Clients.Group($"user_{senderId}")
                             .SendAsync("UpdateMessageStatus", new StatusDto
                             {
                                 MessageId = messageId,
@@ -173,6 +179,12 @@ namespace MessengerServer.Hubs
                 _logger.LogError(ex, "Error in MarkMessageAsRead");
                 throw;
             }
+        }
+
+
+        public async Task SendFileMessage(int userId, int fileId, int chatId)
+        {
+            await SendMessage(userId, "[Файл]", chatId, fileId);
         }
 
         /// <summary>
