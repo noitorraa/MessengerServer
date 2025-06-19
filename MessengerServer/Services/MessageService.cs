@@ -33,14 +33,17 @@ namespace MessengerServer.Services
 
             var messages = await baseQuery
                 .Include(m => m.File)
+                .Include(m => m.MessageStatuses) // Добавляем загрузку статусов
                 .OrderByDescending(m => m.CreatedAt)
                 .Skip(skip)
                 .Take(take)
+                .AsNoTracking() // Для оптимизации
                 .Select(m => new
                 {
                     Message = m,
                     FileInfo = m.File,
-                    Status = m.SenderId == userId
+                    // Для своих сообщений: статус получателя
+                    RecipientStatus = m.SenderId == userId
                         ? m.MessageStatuses
                             .Where(ms => ms.UserId != userId)
                             .Select(ms => (int?)ms.Status)
@@ -50,18 +53,19 @@ namespace MessengerServer.Services
                 .ToListAsync();
 
             var result = messages
-                .Select(x => new MessageDto
+                .Select(x => new
                 {
                     MessageId = x.Message.MessageId,
                     Content = x.Message.Content,
                     UserID = x.Message.SenderId ?? 0,
                     CreatedAt = x.Message.CreatedAt ?? DateTime.MinValue,
                     FileId = x.Message.FileId,
-                    FileName = x.FileInfo?.FileName,
-                    FileType = x.FileInfo?.FileType,
+                    FileName = x.FileInfo != null ? x.FileInfo.FileName : null,
+                    FileType = x.FileInfo != null ? x.FileInfo.FileType : null,
+                    // Для своих сообщений: статус, для чужих: null
                     Status = x.Message.SenderId == userId
-                        ? x.Status ?? (int)MessageStatusType.Sent
-                        : null
+                        ? x.RecipientStatus ?? (int)MessageStatusType.Sent
+                        : (int?)null // Явно указываем null для чужих сообщений
                 })
                 .OrderBy(m => m.CreatedAt)
                 .ToList();
