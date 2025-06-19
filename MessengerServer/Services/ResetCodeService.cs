@@ -21,8 +21,8 @@ namespace MessengerServer.Services
                 var code = new Random().Next(100000, 999999).ToString();
                 _codes[phone] = (code, DateTime.UtcNow.AddMinutes(5));
 
-                //if (!await _sms.SendSmsAsync(phone, $"Ваш код сброса пароля: {code}"))
-                //    return new ObjectResult("SMS send failed") { StatusCode = 500 };
+                if (!await _sms.SendSmsAsync(phone, $"Ваш код сброса пароля: {code}"))
+                    return new ObjectResult("SMS send failed") { StatusCode = 500 };
                 Console.WriteLine($"Код подтверждения {code}, номер телефона {phone}");
                 return new OkResult();
             }

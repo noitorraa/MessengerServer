@@ -65,68 +65,55 @@ namespace MessengerServer.Hubs
                         .LoadAsync();
                 }
 
-                // Получаем всех собеседников (исключая отправителя)
+                // Получаем всех участников чата
                 var recipientIds = await _context.ChatMembers
                     .Where(cm => cm.ChatId == chatId && cm.UserId != userId)
                     .Select(cm => cm.UserId)
                     .ToListAsync();
 
-                // Создаём статусы для каждого получателя
-                var now = DateTime.UtcNow;
-                var statuses = new List<MessageStatus>();
-
-                foreach (var recId in recipientIds)
+                // Создаём статусы для получателей
+                foreach (var recipientId in recipientIds)
                 {
-                    var status = new MessageStatus
+                    _context.MessageStatuses.Add(new MessageStatus
                     {
                         MessageId = message.MessageId,
-                        UserId = recId,
+                        UserId = recipientId,
                         Status = (int)MessageStatusType.Delivered,
-                        UpdatedAt = now
-                    };
-                    statuses.Add(status);
-                    _context.MessageStatuses.Add(status);
+                        UpdatedAt = DateTime.UtcNow
+                    });
                 }
 
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                // DTO для отправителя (со статусом Delivered)
-                var senderDto = new MessageDto
+                // Новый DTO с указанием chatId
+                var chatMessageDto = new ChatMessageDto
                 {
-                    MessageId = message.MessageId,
-                    Content = message.Content,
-                    UserID = userId,
-                    CreatedAt = message.CreatedAt.Value,
-                    FileId = fileId,
-                    FileName = message.File?.FileName,
-                    FileType = message.File?.FileType,
-                    Status = (int)MessageStatusType.Delivered
+                    ChatId = chatId,
+                    Message = new MessageDto
+                    {
+                        MessageId = message.MessageId,
+                        Content = message.Content,
+                        UserID = userId,
+                        CreatedAt = message.CreatedAt.Value,
+                        FileId = fileId,
+                        FileName = message.File?.FileName,
+                        FileType = message.File?.FileType,
+                        Status = null
+                    }
                 };
 
-                // DTO для получателя (без статуса)
-                var recipientDto = new MessageDto
-                {
-                    MessageId = message.MessageId,
-                    Content = message.Content,
-                    UserID = userId,
-                    CreatedAt = message.CreatedAt.Value,
-                    FileId = fileId,
-                    FileName = message.File?.FileName,
-                    FileType = message.File?.FileType,
-                    Status = null
-                };
+                // Отправляем в группу чата (все участники)
+                await Clients.Group($"chat_{chatId}")
+                    .SendAsync("ReceiveMessage", chatMessageDto);
 
-                // Отправляем отправителю
+                // Отправляем отправителю статус через личную группу
                 await Clients.Group($"user_{userId}")
-                    .SendAsync("ReceiveMessage", senderDto);
-
-                // Отправляем всем получателям
-                foreach (var recId in recipientIds)
-                {
-                    await Clients.Group($"user_{recId}")
-                        .SendAsync("ReceiveMessage", recipientDto);
-                }
+                    .SendAsync("UpdateMessageStatus", new StatusDto
+                    {
+                        MessageId = message.MessageId,
+                        Status = (int)MessageStatusType.Delivered
+                    });
             }
             catch (Exception ex)
             {

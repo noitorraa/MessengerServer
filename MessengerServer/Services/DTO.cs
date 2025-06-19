@@ -70,6 +70,12 @@ namespace MessengerServer.Services
         public string? ChatName { get; set; }
         public List<int>? UserIds { get; set; }
     }
+
+    public class ChatMessageDto
+    {
+        public int ChatId { get; set; }
+        public MessageDto Message { get; set; }
+    }
     
     public class ResetModel
     {
