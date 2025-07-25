@@ -13,7 +13,5 @@ public partial class Chat
 
     public virtual ICollection<ChatMember> ChatMembers { get; set; } = new List<ChatMember>();
 
-    public virtual ICollection<MediaFile> MediaFiles { get; set; } = new List<MediaFile>();
-
     public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
 }

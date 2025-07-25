@@ -1,9 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
+using Microsoft.AspNetCore.Mvc.Filters;
 using MessengerServer.Model;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using MessengerServer.Services;
 
 namespace MessengerServer.Controllers
 {
@@ -11,24 +10,155 @@ namespace MessengerServer.Controllers
     [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
-        private readonly MessengerDataBaseContext _context;
+        private readonly IUserService _userService;
+        private readonly IVerificationService _verificationService;
+        private readonly IChatService _chatService;
+        private readonly IMessageService _messageService;
+        private readonly IFileService _fileService;
+        private readonly ICleanupService _cleanupService;
+        private readonly Timer _cleanupTimer;
 
-        public UsersController(MessengerDataBaseContext context)
+        public UsersController(
+            IUserService userService,
+            IVerificationService verificationService,
+            IChatService chatService,
+            IMessageService messageService,
+            IFileService fileService,
+            ICleanupService cleanupService)
         {
-            _context = context;
+            _userService = userService;
+            _verificationService = verificationService;
+            _chatService = chatService;
+            _messageService = messageService;
+            _fileService = fileService;
+            _cleanupService = cleanupService;
+            _cleanupTimer = new Timer(CleanupExpiredData, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+        }
+
+        [HttpPut("change-login")]
+        public async Task<IActionResult> ChangeLogin([FromBody] ChangeLoginRequest request)
+        {
+            return await _userService.ChangeLogin(request);
+        }
+
+        [HttpPut("change-avatar")]
+        public async Task<IActionResult> ChangeAvatar([FromBody] ChangeAvatarRequest request)
+        {
+            return await _userService.ChangeAvatar(request);
+        }
+
+        private void CleanupExpiredData(object? state)
+        {
+            _cleanupService.CleanupExpiredData();
         }
 
         [HttpGet("authorization")]
         public async Task<ActionResult<User>> GetUserByLoginAndPassword(string login, string password)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == login && u.PasswordHash == password);
-            if (user == null)
-            {
-                return NotFound(new { Message = "Пользователь не найден" });
-            }
-            return Ok(user);
+            return await _userService.GetUserByLoginAndPassword(login, password);
         }
 
-        // Другие методы для работы с пользователями
+        [HttpPost("send-verification-code")]
+        public async Task<IActionResult> SendVerificationCode([FromBody] PhoneRequest request)
+        {
+            return await _verificationService.SendVerificationCodeAsync(request.Phone);
+        }
+
+        [HttpPost("verify-code")]
+        public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request)
+        {
+            return await _verificationService.VerifyCodeAsync(request.Phone, request.Code);
+        }
+
+        [HttpGet("chats/{userId}")]
+        public async Task<ActionResult<List<ChatDto>>> GetUserChats(int userId)
+        {
+            return await _chatService.GetUserChats(userId);
+        }
+
+        [HttpGet("chats/{chatId}/{userId}/messages")]
+        public async Task<IActionResult> GetMessages(
+            int userId, 
+            int chatId,
+            [FromQuery] DateTime? since = null,
+            [FromQuery] DateTime? before = null,
+            [FromQuery] int skip = 0,
+            [FromQuery] int take = 100)
+        {
+            return await _messageService.GetMessages(userId, chatId, since, before, skip, take);
+        }
+
+        [HttpDelete("chats/{chatId}")]
+        public async Task<IActionResult> DeleteChat(int chatId)
+        {
+            return await _chatService.DeleteChat(chatId);
+        }
+
+        [HttpPost("registration")]
+        public async Task<IActionResult> Registration([FromBody] User user)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            }
+
+            return await _userService.Registration(user);
+        }
+
+        [HttpGet("search")]
+        public async Task<ActionResult<List<User>>> SearchUsersByLogin(string login)
+        {
+            return await _userService.SearchUsersByLogin(login);
+        }
+
+        [HttpPost("chats")]
+        public async Task<ActionResult<Chat>> CreateChat([FromBody] ChatCreationRequest request)
+        {
+            return await _chatService.CreateChat(request);
+        }
+
+        [HttpPost("send-reset-code")]
+        public async Task<IActionResult> SendResetCode([FromQuery] string phone)
+        {
+            return await _userService.SendResetCode(phone);
+        }
+
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetModel model)
+        {
+            return await _userService.ResetPassword(model);
+        }
+
+        [HttpGet("chats/existing")]
+        public async Task<ActionResult<Chat>> GetExistingChat(int user1Id, int user2Id)
+        {
+            return await _userService.GetExistingChat(user1Id, user2Id);
+        }
+
+        [HttpPost("upload/{chatId}/{userId}")]
+        [RequestSizeLimit(FileService.MAX_FILE_SIZE)]
+        [RequestFormLimits(MultipartBodyLengthLimit = FileService.MAX_FILE_SIZE)]
+        public async Task<IActionResult> UploadFile(
+            [FromRoute] int chatId,
+            [FromRoute] int userId,
+            IFormFile file)
+        {
+            return await _fileService.UploadFile(chatId, userId, file);
+        }
+
+        [HttpGet("{fileId}")]
+        public async Task<IActionResult> GetFile(int fileId)
+        {
+            return await _fileService.GetFile(fileId);
+        }
+
+        [HttpGet("profile/{userId}")]
+        public async Task<ActionResult<UserProfileDto>> GetUserProfile(int userId)
+        {
+            return await _userService.GetUserProfile(userId);
+        }
+
+
     }
 }

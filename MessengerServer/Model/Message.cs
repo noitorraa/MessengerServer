@@ -15,7 +15,11 @@ public partial class Message
 
     public DateTime? CreatedAt { get; set; }
 
+    public int? FileId { get; set; }
+
     public virtual Chat? Chat { get; set; }
+
+    public virtual File? File { get; set; }
 
     public virtual ICollection<MessageStatus> MessageStatuses { get; set; } = new List<MessageStatus>();
 
